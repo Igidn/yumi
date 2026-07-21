@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "dist/renderer",
+    "rootDir": "src/renderer",
+    "types": ["vite/client"]
+  },
+  "include": ["src/renderer/**/*", "src/shared/**/*"]
+}

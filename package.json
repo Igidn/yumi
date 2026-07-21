@@ -1,0 +1,45 @@
+{
+  "name": "yumi",
+  "version": "0.1.0",
+  "description": "An ebook reader with agent-powered explanations",
+  "author": "Igidn",
+  "license": "MIT",
+  "main": "dist/main/index.js",
+  "scripts": {
+    "dev": "concurrently -n main,renderer -c blue,green \"npm run dev:main\" \"npm run dev:renderer\"",
+    "dev:main": "tsc -p tsconfig.main.json && electron dist/main/index.js",
+    "dev:renderer": "vite",
+    "build": "npm run build:renderer && npm run build:main",
+    "build:main": "tsc -p tsconfig.main.json",
+    "build:renderer": "vite build",
+    "package": "npm run build && electron-builder",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx src/main/migrate.ts"
+  },
+  "dependencies": {
+    "@excalidraw/excalidraw": "^0.18.0",
+    "better-sqlite3": "^13.0.1",
+    "drizzle-orm": "^0.38.0",
+    "electron-store": "^10.0.0",
+    "katex": "^0.16.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "sql.js": "^1.12.0",
+    "zustand": "^5.0.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.0.0",
+    "@types/katex": "^0.16.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@types/sql.js": "^1.4.11",
+    "concurrently": "^9.0.0",
+    "drizzle-kit": "^0.28.0",
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0",
+    "tailwindcss": "^4.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.7.0",
+    "vite": "^6.0.0"
+  }
+}
