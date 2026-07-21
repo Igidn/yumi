@@ -3,15 +3,15 @@ import { sqliteTable, text, integer, real } from "drizzle-orm/sqlite-core";
 export const books = sqliteTable("books", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   title: text("title").notNull(),
-  author: text("author").default(""),
-  format: text("format").notNull(), // "pdf" | "epub"
+  author: text("author").notNull().default(""),
+  format: text("format").$type<"epub" | "pdf">().notNull(),
   sourcePath: text("source_path").notNull(),
   coverPath: text("cover_path"),
   importedAt: text("imported_at").notNull(),
   lastOpenedAt: text("last_opened_at"),
-  progress: real("progress").default(0), // 0–1 fraction
-  collection: text("collection").default(""),
-  trashed: integer("trashed").default(0), // boolean
+  progress: real("progress").notNull().default(0), // 0–1 fraction
+  collection: text("collection").notNull().default(""),
+  trashed: integer("trashed").notNull().default(0), // boolean
 });
 
 export const chapters = sqliteTable("chapters", {
@@ -24,7 +24,7 @@ export const chapters = sqliteTable("chapters", {
   rawText: text("raw_text").notNull(), // OCR output
   agentExpandedText: text("agent_expanded_text"), // after agent pre-expansion
   agentExpandedAt: text("agent_expanded_at"),
-  scrollPosition: real("scroll_position").default(0),
+  scrollPosition: real("scroll_position").notNull().default(0),
 });
 
 export const annotations = sqliteTable("annotations", {
@@ -35,8 +35,8 @@ export const annotations = sqliteTable("annotations", {
   position: integer("position").notNull(), // char offset in rawText
   originalSpan: text("original_span").notNull(),
   expandedText: text("expanded_text").notNull(),
-  collapsed: integer("collapsed").default(1), // boolean
-  agentGenerated: integer("agent_generated").default(1),
+  collapsed: integer("collapsed").notNull().default(1), // boolean
+  agentGenerated: integer("agent_generated").notNull().default(1),
   createdAt: text("created_at").notNull(),
 });
 
@@ -47,8 +47,8 @@ export const notes = sqliteTable("notes", {
     .references(() => chapters.id, { onDelete: "cascade" }),
   position: integer("position"), // char offset, null for chapter-level notes
   highlightedSpan: text("highlighted_span"),
-  noteText: text("note_text").default(""),
-  color: text("color").default("default"),
+  noteText: text("note_text").notNull().default(""),
+  color: text("color").notNull().default("default"),
   createdAt: text("created_at").notNull(),
 });
 

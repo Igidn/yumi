@@ -1,12 +1,19 @@
 import { app, BrowserWindow } from "electron";
 import path from "path";
+import { registerIpcHandlers } from "./ipc";
+import { getStore } from "./store";
 
 const isDev = process.env.NODE_ENV !== "production";
 
-function createWindow() {
+async function createWindow() {
+  const store = await getStore();
+  const bounds = store.get("windowBounds");
+
   const win = new BrowserWindow({
-    width: 1200,
-    height: 800,
+    width: bounds.width,
+    height: bounds.height,
+    x: bounds.x,
+    y: bounds.y,
     minWidth: 800,
     minHeight: 600,
     title: "Yumi",
@@ -17,14 +24,26 @@ function createWindow() {
     },
   });
 
+  const saveBounds = () => {
+    const b = win.getNormalBounds();
+    store.set("windowBounds", b);
+  };
+
+  win.on("resize", saveBounds);
+  win.on("move", saveBounds);
+  win.on("moved", saveBounds);
+
   if (isDev) {
-    win.loadURL("http://localhost:5173");
+    await win.loadURL("http://localhost:5173");
   } else {
-    win.loadFile(path.join(__dirname, "../renderer/index.html"));
+    await win.loadFile(path.join(__dirname, "..", "renderer", "index.html"));
   }
 }
 
-app.whenReady().then(createWindow);
+app.whenReady().then(async () => {
+  registerIpcHandlers();
+  await createWindow();
+});
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
