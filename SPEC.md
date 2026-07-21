@@ -82,8 +82,8 @@
 ## 4. Drawing & Annotation Overlay
 
 **Modes**
-- Read mode (`i`): standard reading, clicks select text, scrolling navigates.
-- Draw mode (`d`): the drawing canvas renders as a transparent overlay on top of the text. Clicks and drags draw on the overlay; the text underneath remains fully visible and unchanged. Scrolling is passed through to the text layer — the drawing canvas scrolls in sync with the text.
+- Read mode (`esc`): standard reading, clicks select text, scrolling navigates.
+- Draw mode (`i`): the drawing canvas renders as a transparent overlay on top of the text. Clicks and drags draw on the overlay; the text underneath remains fully visible and unchanged. Scrolling is passed through to the text layer — the drawing canvas scrolls in sync with the text.
 - In draw mode, text selection is disabled. All pointer events go to the drawing canvas.
 - Visual indicator in the status bar shows current mode.
 
