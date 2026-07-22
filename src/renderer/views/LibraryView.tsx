@@ -105,6 +105,13 @@ export function LibraryView({ onOpenBook }: { onOpenBook: () => void }) {
     });
   }, []);
 
+  // Auto-dismiss the import toast after 15s so it stops nagging.
+  useEffect(() => {
+    if (!importMessage) return;
+    const t = setTimeout(() => setImportMessage(null), 15_000);
+    return () => clearTimeout(t);
+  }, [importMessage]);
+
   const visibleBooks = useMemo(() => {
     const q = query.trim().toLowerCase();
     const filtered = q
