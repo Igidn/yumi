@@ -35,8 +35,10 @@ app.on("open-file", (event, filePath) => {
 
 async function handleOpenFile(filePath: string): Promise<void> {
   try {
-    await importBook(filePath);
-    broadcastEvent("library:changed");
+    // open-file has no renderer to prompt, so silently skip duplicates
+    // rather than clobber an existing book without confirmation.
+    const outcome = await importBook(filePath, "skip");
+    if (outcome.status === "imported") broadcastEvent("library:changed");
   } catch (err) {
     // ponytail: real toast UI lands in a later milestone; console is enough
     // for M1's import bullet. The file is rejected, the app keeps running.

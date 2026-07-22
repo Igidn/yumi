@@ -3,6 +3,7 @@ import { LibraryView } from "./views/LibraryView";
 import { ReaderView } from "./views/ReaderView";
 import { SettingsView } from "./views/SettingsView";
 import { useImport } from "./hooks/useImport";
+import { DuplicatePrompt } from "./components/DuplicatePrompt";
 
 type View = "library" | "settings" | "reader";
 
@@ -16,7 +17,7 @@ export default function App() {
   const navRef = useRef<HTMLElement>(null);
   const [pill, setPill] = useState({ left: 0, width: 0 });
 
-  const { importPaths } = useImport();
+  const { importPaths, pendingDuplicate, resolveDuplicate } = useImport();
 
   // Track nested dragenter/dragleave with a counter so the overlay doesn't
   // flicker when the cursor crosses child elements.
@@ -122,6 +123,12 @@ export default function App() {
       </main>
 
       {isDraggingFiles && <DropOverlay />}
+      {pendingDuplicate && (
+        <DuplicatePrompt
+          pending={pendingDuplicate}
+          onResolve={resolveDuplicate}
+        />
+      )}
     </div>
   );
 }

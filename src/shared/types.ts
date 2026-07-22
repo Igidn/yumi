@@ -8,6 +8,8 @@ export interface Book {
   author: string;
   format: BookFormat;
   sourcePath: string;
+  // SHA-256 of the imported file content; the dedup key (SPEC §1).
+  sha256: string | null;
   coverPath: string | null;
   importedAt: string;
   lastOpenedAt: string | null;
@@ -31,12 +33,24 @@ export type IPCChannel =
   | "dialog:openFile"
   | "db:fts5";
 
+/** Result of an `import:book` call (SPEC §1 duplicate handling). */
+export type ImportOutcome =
+  | { status: "imported"; book: Book }
+  | { status: "duplicate"; existingBook: Book }
+  | { status: "skipped"; existingBook: Book };
+
 export interface IPCPayloads {
   "settings:get": { key: string };
   "settings:set": { key: string; value: string };
   "books:list": void;
   "books:insert": { title: string; author: string; format: BookFormat };
-  "import:book": { sourcePath: string };
+  "import:book": {
+    sourcePath: string;
+    // Resolution for a detected duplicate. Omit ("prompt") to detect and
+    // return `{ status: "duplicate" }` without writing; "skip" keeps the
+    // existing book; "replace" deletes the existing book then imports.
+    duplicateHandling?: "skip" | "replace";
+  };
   "dialog:openFile": void;
   "db:fts5": void;
 }
@@ -46,7 +60,7 @@ export interface IPCResponses {
   "settings:set": void;
   "books:list": Book[];
   "books:insert": Book;
-  "import:book": Book;
+  "import:book": ImportOutcome;
   "dialog:openFile": string[];
   "db:fts5": boolean;
 }

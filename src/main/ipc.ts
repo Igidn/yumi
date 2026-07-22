@@ -78,9 +78,15 @@ export function registerIpcHandlers(): void {
   });
 
   handle("import:book", async (_, payload) => {
-    const book = await importBook(payload.sourcePath);
-    broadcastEvent("library:changed");
-    return book;
+    const outcome = await importBook(
+      payload.sourcePath,
+      payload.duplicateHandling ?? "prompt"
+    );
+    // Only notify when the library actually changed: a fresh import or a
+    // replace (which deletes then inserts). A duplicate prompt or a skip
+    // leaves the library untouched.
+    if (outcome.status === "imported") broadcastEvent("library:changed");
+    return outcome;
   });
 
   handle("dialog:openFile", async () => {

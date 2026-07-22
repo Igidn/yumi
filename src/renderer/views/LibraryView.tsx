@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Book } from "../../shared/types";
 import { useImport } from "../hooks/useImport";
+import { DuplicatePrompt } from "../components/DuplicatePrompt";
 
 function SearchIcon() {
   return (
@@ -88,7 +89,8 @@ export function LibraryView({ onOpenBook }: { onOpenBook: () => void }) {
   const [query, setQuery] = useState("");
   const [titleAsc, setTitleAsc] = useState(true);
   const [importMessage, setImportMessage] = useState<string | null>(null);
-  const { importing, importPaths } = useImport();
+  const { importing, importPaths, pendingDuplicate, resolveDuplicate } =
+    useImport();
 
   const fetchBooks = () => window.yumi.invoke("books:list").then(setBooks);
 
@@ -138,7 +140,10 @@ export function LibraryView({ onOpenBook }: { onOpenBook: () => void }) {
         `Imported ${result.ok}, ${result.failed.length} failed: ${result.failed[0].error}`,
       );
     } else {
-      setImportMessage(`Imported ${result.ok} ${result.ok === 1 ? "book" : "books"}`);
+      setImportMessage(
+        `Imported ${result.ok} ${result.ok === 1 ? "book" : "books"}` +
+          (result.skipped > 0 ? `, skipped ${result.skipped} duplicate${result.skipped === 1 ? "" : "s"}` : ""),
+      );
     }
   };
 
@@ -182,6 +187,13 @@ export function LibraryView({ onOpenBook }: { onOpenBook: () => void }) {
         >
           {importMessage}
         </p>
+      )}
+
+      {pendingDuplicate && (
+        <DuplicatePrompt
+          pending={pendingDuplicate}
+          onResolve={resolveDuplicate}
+        />
       )}
 
       {/* Book grid */}

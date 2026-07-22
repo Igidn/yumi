@@ -6,6 +6,8 @@ export const books = sqliteTable("books", {
   author: text("author").notNull().default(""),
   format: text("format").$type<"epub" | "pdf">().notNull(),
   sourcePath: text("source_path").notNull(),
+  // SHA-256 of the imported file content; the dedup key (SPEC §1).
+  sha256: text("sha256"),
   coverPath: text("cover_path"),
   importedAt: text("imported_at").notNull(),
   lastOpenedAt: text("last_opened_at"),
