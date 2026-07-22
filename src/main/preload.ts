@@ -1,8 +1,9 @@
-import { contextBridge, ipcRenderer } from "electron";
+import { contextBridge, ipcRenderer, webUtils } from "electron";
 import type {
   IPCChannel,
   IPCPayloads,
   IPCResponses,
+  YumiEvent,
 } from "../shared/types";
 
 contextBridge.exposeInMainWorld("yumi", {
@@ -14,5 +15,11 @@ contextBridge.exposeInMainWorld("yumi", {
     return ipcRenderer.invoke(channel, ...(args as [any])) as Promise<
       IPCResponses[C]
     >;
+  },
+  getPathForFile: (file: File): string => webUtils.getPathForFile(file),
+  on: (event: YumiEvent, listener: () => void): (() => void) => {
+    const wrapped = () => listener();
+    ipcRenderer.on(event, wrapped);
+    return () => ipcRenderer.removeListener(event, wrapped);
   },
 });

@@ -1,11 +1,13 @@
-import { ipcMain } from "electron";
+import { BrowserWindow, dialog, ipcMain } from "electron";
 import { eq } from "drizzle-orm";
 import { getDb, hasFts5 } from "./database";
 import { appSettings, books } from "./db/schema";
+import { importBook } from "./import";
 import type {
   IPCChannel,
   IPCPayloads,
   IPCResponses,
+  YumiEvent,
 } from "../shared/types";
 
 type Handler<C extends IPCChannel> = (
@@ -18,6 +20,16 @@ function handle<C extends IPCChannel>(
   handler: Handler<C>
 ): void {
   ipcMain.handle(channel, handler as any);
+}
+
+/**
+ * Broadcast a one-way event to every open window. The renderer subscribes
+ * via the preload bridge's `on()`; see `src/shared/types.ts`.
+ */
+export function broadcastEvent(event: YumiEvent): void {
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) win.webContents.send(event);
+  }
 }
 
 export function registerIpcHandlers(): void {
@@ -63,6 +75,34 @@ export function registerIpcHandlers(): void {
       })
       .returning();
     return rows[0];
+  });
+
+  handle("import:book", async (_, payload) => {
+    const book = await importBook(payload.sourcePath);
+    broadcastEvent("library:changed");
+    return book;
+  });
+
+  handle("dialog:openFile", async () => {
+    const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
+    const result = win
+      ? await dialog.showOpenDialog(win, {
+          title: "Import a book",
+          properties: ["openFile", "multiSelections"],
+          filters: [
+            { name: "Ebooks", extensions: ["epub", "pdf"] },
+            { name: "All files", extensions: ["*"] },
+          ],
+        })
+      : await dialog.showOpenDialog({
+          title: "Import a book",
+          properties: ["openFile", "multiSelections"],
+          filters: [
+            { name: "Ebooks", extensions: ["epub", "pdf"] },
+            { name: "All files", extensions: ["*"] },
+          ],
+        });
+    return result.canceled ? [] : result.filePaths;
   });
 
   handle("db:fts5", async () => {
