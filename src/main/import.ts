@@ -95,9 +95,12 @@ export async function importBook(
   const hash = await sha256OfFile(abs);
   const db = await getDb();
 
-  const existing = await db.query.books.findFirst({
-    where: eq(books.sha256, hash),
-  });
+  // Use select().limit(1) rather than the relational `findFirst`: drizzle's
+  // sql.js driver returns an all-undefined object (not `undefined`) when no
+  // row matches, which would make a truthiness guard false-positive every import.
+  const existing = (
+    await db.select().from(books).where(eq(books.sha256, hash)).limit(1)
+  )[0];
   // ponytail: trashed dups aren't consulted. A trashed book with the same
   // hash would let this import proceed and create a second copy; revisit if
   // trash ever holds large duplicates, otherwise the empty-trash purge cleans up.
