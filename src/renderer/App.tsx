@@ -1,44 +1,54 @@
 import { useState } from "react";
 import { LibraryView } from "./views/LibraryView";
 import { ReaderView } from "./views/ReaderView";
+import { SettingsView } from "./views/SettingsView";
 
-type View = "library" | "reader";
+type View = "library" | "settings" | "reader";
+
+const NAV_ITEMS: { id: Exclude<View, "reader">; label: string }[] = [
+  { id: "library", label: "Library" },
+  { id: "settings", label: "Settings" },
+];
 
 export default function App() {
   const [view, setView] = useState<View>("library");
 
   return (
-    <div className="flex h-screen bg-zinc-950 text-zinc-100">
-      <aside className="flex w-56 flex-col border-r border-zinc-800 bg-zinc-900">
-        <div className="p-4">
-          <h1 className="text-lg font-semibold tracking-tight">Yumi</h1>
+    <div className="h-screen overflow-hidden bg-page font-ui text-ink">
+      {/* Floating capsule navbar — doubles as the window drag region */}
+      <header className="pointer-events-none fixed inset-x-0 top-[19px] z-10 flex justify-center px-4">
+        <div className="app-drag pointer-events-auto flex h-[63px] w-full max-w-[551px] items-center justify-between rounded-[10px] bg-shell/80 px-6 shadow-shell backdrop-blur-sm">
+          <span className="select-none font-logo text-[17px] leading-none text-ink">
+            yumi
+          </span>
+          <nav className="app-no-drag flex items-center gap-2">
+            {NAV_ITEMS.map((item) => {
+              const active = view === item.id;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => setView(item.id)}
+                  className={`rounded-[10px] px-4 py-[13px] text-[13px] leading-none transition-colors ${
+                    active
+                      ? "bg-pill text-ink"
+                      : "text-muted hover:text-ink"
+                  }`}
+                >
+                  {item.label}
+                </button>
+              );
+            })}
+          </nav>
         </div>
-        <nav className="flex-1 px-2">
-          <button
-            onClick={() => setView("library")}
-            className={`w-full rounded px-3 py-2 text-left text-sm font-medium transition-colors ${
-              view === "library"
-                ? "bg-zinc-800 text-zinc-100"
-                : "text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-100"
-            }`}
-          >
-            Library
-          </button>
-          <button
-            onClick={() => setView("reader")}
-            className={`w-full rounded px-3 py-2 text-left text-sm font-medium transition-colors ${
-              view === "reader"
-                ? "bg-zinc-800 text-zinc-100"
-                : "text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-100"
-            }`}
-          >
-            Reader
-          </button>
-        </nav>
-      </aside>
+      </header>
 
-      <main className="flex-1 overflow-auto">
-        {view === "library" ? <LibraryView /> : <ReaderView />}
+      {/* Content starts below the capsule (19 + 63 + 30 = 112, per design) */}
+      <main className="h-full overflow-auto pt-[112px]">
+        {view === "library" && (
+          <LibraryView onOpenBook={() => setView("reader")} />
+        )}
+        {view === "settings" && <SettingsView />}
+        {view === "reader" && <ReaderView />}
       </main>
     </div>
   );

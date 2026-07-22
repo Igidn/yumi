@@ -16,14 +16,14 @@ Current state: Electron + React + Vite scaffold boots, sql.js + Drizzle connect 
 
 Spec: §11, §13. The scaffold runs but has gaps that will bite later.
 
-- [ ] Remove `better-sqlite3` from package.json dependencies. It is a leftover; sql.js replaced it (see TECH_STACK.md) and its native build is the known failure.
-- [ ] Add the missing `src/main/migrate.ts` or fix the `db:migrate` script, which points at a file that does not exist.
-- [ ] Fix write persistence in `src/main/database.ts`: it currently exports the whole database to disk on every `run()` call. Debounce writes (for example 500 ms after the last mutation), save on `before-quit`, and confirm Drizzle's writes actually pass through the wrapped `run()` rather than bypassing it via prepared statements.
-- [ ] Remove or comment the `PRAGMA journal_mode = WAL` line. It is a no-op for an in-memory sql.js database and misleads readers.
-- [ ] Confirm FTS5 is available in the bundled sql.js build (`CREATE VIRTUAL TABLE ... USING fts5`). M7 depends on it; better to know now.
-- [ ] Typed IPC layer: channel names and payload types in `src/shared/types.ts`, `ipcMain.handle` wrappers in main, matching `invoke` methods on the preload bridge.
-- [ ] App shell layout: sidebar plus content area, with a library view and a reader view.
-- [ ] electron-store wiring for window bounds and last-opened book.
+- [x] Remove `better-sqlite3` from package.json dependencies. It is a leftover; sql.js replaced it (see TECH_STACK.md) and its native build is the known failure.
+- [x] Add the missing `src/main/migrate.ts` or fix the `db:migrate` script, which points at a file that does not exist.
+- [x] Fix write persistence in `src/main/database.ts`: it currently exports the whole database to disk on every `run()` call. Debounce writes (for example 500 ms after the last mutation), save on `before-quit`, and confirm Drizzle's writes actually pass through the wrapped `run()` rather than bypassing it via prepared statements.
+- [x] Remove or comment the `PRAGMA journal_mode = WAL` line. It is a no-op for an in-memory sql.js database and misleads readers.
+- [x] Confirm FTS5 is available in the bundled sql.js build (`CREATE VIRTUAL TABLE ... USING fts5`). M7 depends on it; better to know now.
+- [x] Typed IPC layer: channel names and payload types in `src/shared/types.ts`, `ipcMain.handle` wrappers in main, matching `invoke` methods on the preload bridge.
+- [x] App shell layout: floating top navigation bar (Library / Settings) plus content area, with a library view and a reader view. Matches the Penpot "Library page" design.
+- [x] electron-store wiring for window bounds and last-opened book.
 
 **Done when:** `npm run dev` boots, a value round-trips renderer → main → SQLite → disk, and it survives an app restart.
 

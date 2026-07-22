@@ -1,84 +1,129 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Book } from "@shared/types";
+import coverPlaceholder from "../assets/cover-placeholder.jpg";
 
-export function LibraryView() {
+function SearchIcon() {
+  return (
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="11" cy="11" r="8" />
+      <path d="m21 21-4.3-4.3" />
+    </svg>
+  );
+}
+
+function MoreIcon() {
+  return (
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <circle cx="12" cy="5" r="1.5" />
+      <circle cx="12" cy="12" r="1.5" />
+      <circle cx="12" cy="19" r="1.5" />
+    </svg>
+  );
+}
+
+function progressLabel(book: Book): string {
+  return book.progress >= 1
+    ? "Finished"
+    : `${Math.round(book.progress * 100)}%`;
+}
+
+function BookCard({ book, onOpen }: { book: Book; onOpen: () => void }) {
+  return (
+    <div className="w-[170px]">
+      <button
+        onClick={onOpen}
+        className="block h-[261px] w-[170px] overflow-hidden transition-opacity hover:opacity-85 focus-visible:outline-2 focus-visible:outline-muted"
+      >
+        <img
+          src={book.coverPath ?? coverPlaceholder}
+          alt={`${book.title} cover`}
+          className="h-full w-full object-cover"
+          draggable={false}
+        />
+      </button>
+      <div className="mt-[8px] flex h-[24px] items-center justify-between">
+        <span className="text-[12px] text-muted">{progressLabel(book)}</span>
+        <button
+          className="text-muted transition-colors hover:text-ink"
+          aria-label={`More options for ${book.title}`}
+        >
+          <MoreIcon />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export function LibraryView({ onOpenBook }: { onOpenBook: () => void }) {
   const [books, setBooks] = useState<Book[]>([]);
-  const [newTitle, setNewTitle] = useState("");
-  const [fts5, setFts5] = useState<boolean | null>(null);
-  const [roundTrip, setRoundTrip] = useState<string | null>(null);
-
-  const loadBooks = async () => {
-    const list = await window.yumi.invoke("books:list");
-    setBooks(list);
-  };
-
-  const addBook = async () => {
-    if (!newTitle.trim()) return;
-    await window.yumi.invoke("books:insert", {
-      title: newTitle,
-      author: "M0 Test",
-      format: "epub",
-    });
-    setNewTitle("");
-    await loadBooks();
-  };
+  const [query, setQuery] = useState("");
+  const [titleAsc, setTitleAsc] = useState(true);
 
   useEffect(() => {
-    loadBooks();
-    window.yumi.invoke("db:fts5").then(setFts5);
-
-    // Round-trip test: write a value to SQLite via main and read it back.
-    (async () => {
-      const testKey = "m0_round_trip";
-      await window.yumi.invoke("settings:set", {
-        key: testKey,
-        value: "survived",
-      });
-      const value = await window.yumi.invoke("settings:get", { key: testKey });
-      setRoundTrip(value);
-    })();
+    window.yumi.invoke("books:list").then(setBooks);
   }, []);
 
+  const visibleBooks = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const filtered = q
+      ? books.filter(
+          (book) =>
+            book.title.toLowerCase().includes(q) ||
+            book.author.toLowerCase().includes(q),
+        )
+      : books;
+    return [...filtered].sort((a, b) =>
+      titleAsc
+        ? a.title.localeCompare(b.title)
+        : b.title.localeCompare(a.title),
+    );
+  }, [books, query, titleAsc]);
+
   return (
-    <div className="flex h-full flex-col p-8">
-      <h1 className="mb-4 text-2xl font-semibold">Library</h1>
-
-      <div className="mb-6 space-y-2 text-sm text-zinc-400">
-        <p>Platform: {window.yumi.platform}</p>
-        <p>FTS5 available: {fts5 === null ? "checking…" : fts5 ? "yes" : "no"}</p>
-        <p>Round-trip value: {roundTrip ?? "…"}</p>
-      </div>
-
-      <div className="mb-6 flex gap-2">
-        <input
-          type="text"
-          value={newTitle}
-          onChange={(e) => setNewTitle(e.target.value)}
-          placeholder="Book title"
-          className="flex-1 rounded border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-blue-500"
-        />
+    <div className="pb-16">
+      {/* Search + sort row */}
+      <div className="mx-auto flex w-full max-w-[551px] gap-[6px] px-4">
+        <div className="relative flex-1">
+          <span className="pointer-events-none absolute left-[12px] top-1/2 -translate-y-1/2 text-muted">
+            <SearchIcon />
+          </span>
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search"
+            className="h-[36px] w-full rounded-[8px] border border-edge bg-field pl-[38px] pr-3 text-[13px] text-ink outline-none placeholder:text-muted focus:border-muted"
+          />
+        </div>
         <button
-          onClick={addBook}
-          className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-500"
+          onClick={() => setTitleAsc((v) => !v)}
+          className="h-[36px] shrink-0 rounded-[8px] border border-edge bg-field px-4 text-[12px] text-muted transition-colors hover:text-ink"
         >
-          Add test book
+          Sort
         </button>
       </div>
 
-      {books.length === 0 ? (
-        <p className="text-zinc-500">No books yet.</p>
+      {/* Book grid */}
+      {visibleBooks.length === 0 ? (
+        <p className="mt-[40px] text-center text-[13px] text-muted">
+          {books.length === 0 ? "No books yet." : "No books match your search."}
+        </p>
       ) : (
-        <ul className="space-y-2">
-          {books.map((book) => (
-            <li
-              key={book.id}
-              className="rounded border border-zinc-800 bg-zinc-900 p-4"
-            >
-              <p className="font-medium text-zinc-100">{book.title}</p>
-              <p className="text-sm text-zinc-400">{book.author}</p>
-            </li>
+        <div className="mt-[31px] grid grid-cols-[repeat(auto-fill,170px)] justify-center gap-x-[55px] gap-y-[48px] px-6">
+          {visibleBooks.map((book) => (
+            <BookCard key={book.id} book={book} onOpen={onOpenBook} />
           ))}
-        </ul>
+        </div>
       )}
     </div>
   );

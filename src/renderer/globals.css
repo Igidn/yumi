@@ -1,1 +1,25 @@
 @import "tailwindcss";
+
+@theme {
+  /* Palette extracted from the Penpot "Library page" design */
+  --color-page: #1a1815; /* app background */
+  --color-shell: #24211d; /* floating navbar (used at 80% opacity) */
+  --color-pill: #3c3834; /* active nav item pill */
+  --color-field: #211e1a; /* search / sort field background */
+  --color-edge: #3c3934; /* field border */
+  --color-ink: #e8e3db; /* primary text */
+  --color-muted: #8a857c; /* secondary text + icons */
+
+  --font-logo: "Sono", ui-monospace, monospace;
+  --font-ui: "Sora", ui-sans-serif, system-ui, sans-serif;
+
+  --shadow-shell: 4px 4px 10px 0 rgb(0 0 0 / 0.2);
+}
+
+.app-drag {
+  -webkit-app-region: drag;
+}
+
+.app-no-drag {
+  -webkit-app-region: no-drag;
+}
