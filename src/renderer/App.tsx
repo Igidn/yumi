@@ -1,7 +1,8 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { LibraryView } from "./views/LibraryView";
 import { ReaderView } from "./views/ReaderView";
 import { SettingsView } from "./views/SettingsView";
+import { useImport } from "./hooks/useImport";
 
 type View = "library" | "settings" | "reader";
 
@@ -15,13 +16,66 @@ export default function App() {
   const navRef = useRef<HTMLElement>(null);
   const [pill, setPill] = useState({ left: 0, width: 0 });
 
-  // ponytail: skip ResizeObserver — buttons are fixed-size, won't shift on window resize
+  const { importPaths } = useImport();
+
+  // Track nested dragenter/dragleave with a counter so the overlay doesn't
+  // flicker when the cursor crosses child elements.
+  const dragCounter = useRef(0);
+  const [isDraggingFiles, setIsDraggingFiles] = useState(false);
+
   useLayoutEffect(() => {
     const active = navRef.current?.querySelector<HTMLElement>(
       '[data-nav-active="true"]'
     );
     if (active) setPill({ left: active.offsetLeft, width: active.offsetWidth });
   }, [view]);
+
+  useEffect(() => {
+    const hasFiles = (e: DragEvent) =>
+      !!e.dataTransfer && Array.from(e.dataTransfer.types).includes("Files");
+
+    const onDragEnter = (e: DragEvent) => {
+      if (!hasFiles(e)) return;
+      e.preventDefault();
+      dragCounter.current += 1;
+      setIsDraggingFiles(true);
+    };
+    const onDragOver = (e: DragEvent) => {
+      if (!hasFiles(e)) return;
+      // Required to allow the subsequent drop.
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
+    };
+    const onDragLeave = (e: DragEvent) => {
+      if (!hasFiles(e)) return;
+      e.preventDefault();
+      dragCounter.current = Math.max(0, dragCounter.current - 1);
+      if (dragCounter.current === 0) setIsDraggingFiles(false);
+    };
+    const onDrop = (e: DragEvent) => {
+      if (!hasFiles(e)) return;
+      e.preventDefault();
+      dragCounter.current = 0;
+      setIsDraggingFiles(false);
+
+      const files = Array.from(e.dataTransfer?.files ?? []);
+      const paths = files
+        .map((f) => window.yumi.getPathForFile(f))
+        .filter((p): p is string => typeof p === "string" && p.length > 0);
+      if (paths.length > 0) void importPaths(paths);
+    };
+
+    window.addEventListener("dragenter", onDragEnter);
+    window.addEventListener("dragover", onDragOver);
+    window.addEventListener("dragleave", onDragLeave);
+    window.addEventListener("drop", onDrop);
+    return () => {
+      window.removeEventListener("dragenter", onDragEnter);
+      window.removeEventListener("dragover", onDragOver);
+      window.removeEventListener("dragleave", onDragLeave);
+      window.removeEventListener("drop", onDrop);
+    };
+  }, [importPaths]);
 
   return (
     <div className="h-screen overflow-hidden bg-page font-ui text-ink">
@@ -66,6 +120,44 @@ export default function App() {
         {view === "settings" && <SettingsView />}
         {view === "reader" && <ReaderView />}
       </main>
+
+      {isDraggingFiles && <DropOverlay />}
     </div>
+  );
+}
+
+function DropOverlay() {
+  return (
+    <div
+      aria-hidden
+      className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center bg-page/70 backdrop-blur-sm"
+    >
+      <div className="flex h-[200px] w-[420px] flex-col items-center justify-center gap-3 rounded-[14px] border-2 border-dashed border-muted bg-shell/80 shadow-shell">
+        <UploadIcon />
+        <p className="text-[14px] text-ink">Drop to import</p>
+        <p className="text-[12px] text-muted">.epub or .pdf</p>
+      </div>
+    </div>
+  );
+}
+
+function UploadIcon() {
+  return (
+    <svg
+      width="28"
+      height="28"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="text-muted"
+      aria-hidden
+    >
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <polyline points="17 8 12 3 7 8" />
+      <line x1="12" y1="3" x2="12" y2="15" />
+    </svg>
   );
 }
