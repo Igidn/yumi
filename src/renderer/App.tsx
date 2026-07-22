@@ -16,7 +16,7 @@ export default function App() {
   return (
     <div className="h-screen overflow-hidden bg-page font-ui text-ink">
       {/* Top strip + floating capsule navbar — the whole strip is the window drag region */}
-      <header className="app-drag fixed inset-x-0 top-0 z-10 flex justify-center pt-[19px]">
+      <header className="app-drag fixed inset-x-0 top-0 z-10 flex justify-center pt-[13px]">
         {/* Same max-width + padding as the search row below, so edges align */}
         <div className="w-full max-w-[551px] px-4">
           <div className="flex h-[44px] items-center justify-between rounded-[10px] bg-shell/80 px-4 shadow-shell backdrop-blur-sm">
@@ -32,7 +32,7 @@ export default function App() {
                     onClick={() => setView(item.id)}
                     className={`rounded-[6px] px-4 py-[9px] text-[13px] leading-none transition-colors ${
                       active
-                        ? "bg-pill text-ink"
+                        ? "bg-pill text-ink shadow-shell"
                         : "text-muted hover:text-ink"
                     }`}
                   >
@@ -45,7 +45,6 @@ export default function App() {
         </div>
       </header>
 
-      {/* Content starts below the capsule (19 + 44 + 20 = 83, per design) */}
       <main className="h-full overflow-auto pt-[83px]">
         {view === "library" && (
           <LibraryView onOpenBook={() => setView("reader")} />

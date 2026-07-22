@@ -92,7 +92,7 @@ export function LibraryView({ onOpenBook }: { onOpenBook: () => void }) {
   return (
     <div className="pb-16">
       {/* Search + sort row */}
-      <div className="mx-auto flex w-full max-w-[551px] gap-[6px] px-4">
+      <div className="mx-auto -mt-3 flex w-full max-w-[551px] gap-[6px] px-4">
         <div className="relative flex-1">
           <span className="pointer-events-none absolute left-[12px] top-1/2 -translate-y-1/2 text-muted">
             <SearchIcon />
