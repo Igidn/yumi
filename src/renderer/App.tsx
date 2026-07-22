@@ -46,7 +46,7 @@ export default function App() {
                     key={item.id}
                     data-nav-active={active}
                     onClick={() => setView(item.id)}
-                    className={`relative z-10 rounded-[6px] px-4 py-[9px] text-[13px] leading-none transition-colors ${
+                    className={`relative z-10 rounded-[6px] px-4 py-[9px] text-[12px] leading-none transition-colors ${
                       active ? "text-ink" : "text-muted hover:text-ink"
                     }`}
                   >
