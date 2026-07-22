@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import type { Book } from "@shared/types";
-import coverPlaceholder from "../assets/cover-placeholder.jpg";
+import type { Book } from "../../shared/types";
 
 function SearchIcon() {
   return (
@@ -45,7 +44,7 @@ function BookCard({ book, onOpen }: { book: Book; onOpen: () => void }) {
         className="block h-[261px] w-[170px] overflow-hidden transition-opacity hover:opacity-85 focus-visible:outline-2 focus-visible:outline-muted"
       >
         <img
-          src={book.coverPath ?? coverPlaceholder}
+          src={book.coverPath ?? ""}
           alt={`${book.title} cover`}
           className="h-full w-full object-cover"
           draggable={false}

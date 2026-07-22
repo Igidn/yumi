@@ -1,5 +1,4 @@
 import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react"; // not used — React 19 uses the automatic JSX transform
 import tailwindcss from "@tailwindcss/vite";
 import path from "path";
 
