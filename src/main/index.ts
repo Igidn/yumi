@@ -10,16 +10,26 @@ const isDev = process.env.NODE_ENV !== "production";
  * macOS delivers `open-file` events for Finder/dock drops. They can fire
  * before the app is ready (and before any window exists), so buffer them
  * and drain once the window finishes loading.
+ *
+ * On macOS, closing all windows doesn't quit the app, so `mainWindow` can
+ * point at a destroyed window; check `isDestroyed()` before touching its
+ * `webContents`, and (re)create a window if one is needed to drain buffered
+ * files into.
  */
 const pendingOpenFiles: string[] = [];
 let mainWindow: BrowserWindow | null = null;
 
 app.on("open-file", (event, filePath) => {
   event.preventDefault();
-  if (mainWindow && !mainWindow.webContents.isLoading()) {
+  if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.webContents.isLoading()) {
     void handleOpenFile(filePath);
-  } else {
-    pendingOpenFiles.push(filePath);
+    return;
+  }
+  pendingOpenFiles.push(filePath);
+  // No live window to receive the drop: spin one up so buffered files get
+  // drained on did-finish-load rather than left orphaned until activation.
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    void createWindow();
   }
 });
 
@@ -77,6 +87,10 @@ async function createWindow() {
       const file = pendingOpenFiles.shift()!;
       void handleOpenFile(file);
     }
+  });
+
+  win.on("closed", () => {
+    if (mainWindow === win) mainWindow = null;
   });
 
   if (isDev) {
