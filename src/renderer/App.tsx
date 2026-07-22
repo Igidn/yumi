@@ -15,22 +15,22 @@ export default function App() {
 
   return (
     <div className="h-screen overflow-hidden bg-page font-ui text-ink">
-      {/* Floating capsule navbar — doubles as the window drag region */}
-      <header className="pointer-events-none fixed inset-x-0 top-[19px] z-10 flex justify-center">
+      {/* Top strip + floating capsule navbar — the whole strip is the window drag region */}
+      <header className="app-drag fixed inset-x-0 top-0 z-10 flex justify-center pt-[19px]">
         {/* Same max-width + padding as the search row below, so edges align */}
         <div className="w-full max-w-[551px] px-4">
-          <div className="app-drag pointer-events-auto flex h-[63px] items-center justify-between rounded-[10px] bg-shell/80 px-6 shadow-shell backdrop-blur-sm">
-            <span className="select-none font-logo text-[17px] leading-none text-ink">
+          <div className="flex h-[44px] items-center justify-between rounded-[10px] bg-shell/80 px-4 shadow-shell backdrop-blur-sm">
+            <span className="select-none font-logo text-[15px] leading-none text-ink">
               yumi
             </span>
-            <nav className="app-no-drag flex items-center gap-2">
+            <nav className="app-no-drag flex items-center gap-1.5">
               {NAV_ITEMS.map((item) => {
                 const active = view === item.id;
                 return (
                   <button
                     key={item.id}
                     onClick={() => setView(item.id)}
-                    className={`rounded-[10px] px-4 py-[13px] text-[13px] leading-none transition-colors ${
+                    className={`rounded-[6px] px-4 py-[9px] text-[13px] leading-none transition-colors ${
                       active
                         ? "bg-pill text-ink"
                         : "text-muted hover:text-ink"
@@ -45,8 +45,8 @@ export default function App() {
         </div>
       </header>
 
-      {/* Content starts below the capsule (19 + 63 + 30 = 112, per design) */}
-      <main className="h-full overflow-auto pt-[112px]">
+      {/* Content starts below the capsule (19 + 44 + 20 = 83, per design) */}
+      <main className="h-full overflow-auto pt-[83px]">
         {view === "library" && (
           <LibraryView onOpenBook={() => setView("reader")} />
         )}
