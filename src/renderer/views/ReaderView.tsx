@@ -350,9 +350,7 @@ export function ReaderView({ bookId }: { bookId: number }) {
       ) : (
         <div className="flex flex-1 items-center justify-center px-8">
           <p className="max-w-[420px] text-center text-[13px] leading-relaxed text-reader-muted">
-            {book.format === "pdf"
-              ? "PDF reading arrives with the OCR pipeline (M2)."
-              : "This book has no readable chapters."}
+            This book has no readable chapters.
           </p>
         </div>
       )}

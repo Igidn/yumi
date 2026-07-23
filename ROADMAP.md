@@ -6,7 +6,6 @@ Current state: Electron + React + Vite scaffold boots, sql.js + Drizzle connect 
 
 ## Why this order
 
-- **EPUB before PDF.** EPUB is zipped XHTML, so the first reader needs no OCR. PDF import depends on the Unlimited-OCR pipeline, the biggest technical unknown in the spec.
 - **Notes and drawing before the agent.** They have no external dependencies and they build the text-selection and position-anchoring machinery the agent features reuse.
 - **On-demand agent before import-time pre-expansion.** The manual path (highlight, right-click, explain) validates context assembly and prompt design before the same code runs unattended on every chapter.
 - **TTS after the agent.** Agent-prepared audio text (SPEC §7) depends on the agent context builder from M4.
@@ -39,21 +38,6 @@ Spec: §1 (import, trash), §2 (typography basics, dark mode), §3 (baseline nav
 - [x] Navigation: scrolling, previous/next chapter (`Cmd+[` / `Cmd+]`), TOC sidebar with click-to-jump, minimal `Cmd+K` palette for chapter jump.
 
 **Done when:** import an EPUB, read, quit, reopen: same book, same scroll position. A deleted book sits in trash, restores, and the empty-trash dialog shows the count.
-
-## M2: PDF and OCR pipeline
-
-Spec: §1 (PDF import), §2 (layout-preserving text, KaTeX, figures, tables, lightbox). Highest-risk milestone, so it starts with a spike.
-
-- [ ] **Spike first, timeboxed:** run Unlimited-OCR 4-bit GGUF through llama.cpp on three real textbook pages (prose, math-heavy, figure-plus-table). Judge whether the output is good enough to drive §2 rendering. If not, evaluate alternatives before building anything else.
-- [ ] Born-digital shortcut: for PDFs with an embedded text layer, extract text and positions with pdf.js and skip OCR entirely. Reserve OCR for scanned books. Most real textbooks take the cheap path.
-- [ ] OCR sidecar: spawn llama.cpp as a child process from main, stream results, kill on quit. Model file lives in the app support directory, downloaded on first PDF import.
-- [ ] Chapter detection: PDF bookmarks/outline first, page-range fallback.
-- [ ] Figure extraction: images and captions stored as files on disk, paths in the database, placed inline at their original positions.
-- [ ] Tables rendered as table elements, not text art.
-- [ ] Math spans rendered with KaTeX.
-- [ ] Figure lightbox with zoom and pan.
-
-**Done when:** a real textbook PDF imports and its chapters show formatted text, working equations, and figures in place; the lightbox zooms.
 
 ## M3: Notes and drawing
 
@@ -159,8 +143,7 @@ Not scheduled. Each is independent of the others.
 
 ## Risks
 
-1. **OCR quality gates all of §2.** The M2 spike settles it before rendering work begins, and the born-digital shortcut keeps most PDFs off the OCR path entirely.
-2. **Excalidraw scroll sync.** The M3 checkpoint exists because a transparent third-party canvas tracking text scroll is unproven. The fallback (custom rough.js Canvas2D) is spec-sanctioned.
-3. **sql.js write amplification.** Every mutation exports the whole database. Fine while the library is small; figures live on disk so the database stays small. The M0 debounce covers it; if libraries grow past a few hundred MB of text, revisit persistence.
-4. **Agent cost and latency.** Pre-expansion on a 40-chapter textbook is a lot of tokens. Per-book depth settings and the Ollama option are the controls; both land in M4, not after.
-5. **Scope.** M1 alone is a usable reader. If momentum drops, the cut line for a smaller v1 is M0–M4 plus M6 and M9; M5, M7, and M8 can slip to v1.1 without blocking anything.
+1. **Excalidraw scroll sync.** The M3 checkpoint exists because a transparent third-party canvas tracking text scroll is unproven. The fallback (custom rough.js Canvas2D) is spec-sanctioned.
+2. **sql.js write amplification.** Every mutation exports the whole database. Fine while the library is small; figures live on disk so the database stays small. The M0 debounce covers it; if libraries grow past a few hundred MB of text, revisit persistence.
+3. **Agent cost and latency.** Pre-expansion on a 40-chapter textbook is a lot of tokens. Per-book depth settings and the Ollama option are the controls; both land in M4, not after.
+4. **Scope.** M1 alone is a usable reader. If momentum drops, the cut line for a smaller v1 is M0–M4 plus M6 and M9; M5, M7, and M8 can slip to v1.1 without blocking anything.

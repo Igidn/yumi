@@ -219,7 +219,7 @@ export function registerIpcHandlers(): void {
       title: "Import a book",
       properties: ["openFile", "multiSelections"],
       filters: [
-        { name: "Ebooks", extensions: ["epub", "pdf"] },
+        { name: "Ebooks", extensions: ["epub"] },
         { name: "All files", extensions: ["*"] },
       ],
     };

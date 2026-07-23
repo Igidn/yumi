@@ -113,8 +113,7 @@ async function ensureChapters(
  * renderer-usable cover URL), its chapters with parsed blocks, and the
  * chapter position to resume at.
  *
- * Throws when the book is missing or trashed. PDF books load with zero
- * chapters — the renderer shows the "PDF arrives in M2" placeholder.
+ * Throws when the book is missing or trashed.
  */
 export async function loadReaderBook(bookId: number): Promise<ReaderPayload> {
   const db = await getDb();

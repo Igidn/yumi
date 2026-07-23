@@ -10,7 +10,6 @@ import type { Book, BookFormat, ImportOutcome } from "../shared/types";
 
 const SUPPORTED_EXTENSIONS: Record<string, BookFormat> = {
   ".epub": "epub",
-  ".pdf": "pdf",
 };
 
 /**
@@ -35,7 +34,7 @@ export function getFormatForFile(filePath: string): BookFormat | null {
 }
 
 /**
- * SHA-256 of a file's contents, streamed so large PDFs don't load whole
+ * SHA-256 of a file's contents, streamed so large files don't load whole
  * into memory. The dedup key (SPEC §1).
  */
 function sha256OfFile(filePath: string): Promise<string> {

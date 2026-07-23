@@ -1,6 +1,6 @@
 export type Platform = "darwin" | "win32" | "linux";
 
-export type BookFormat = "epub" | "pdf";
+export type BookFormat = "epub";
 
 export interface Book {
   id: number;

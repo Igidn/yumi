@@ -151,7 +151,7 @@ function DropOverlay() {
       <div className="flex h-[200px] w-[420px] flex-col items-center justify-center gap-3 rounded-[14px] border-2 border-dashed border-muted bg-shell/80 shadow-shell">
         <UploadIcon />
         <p className="text-[14px] text-ink">Drop to import</p>
-        <p className="text-[12px] text-muted">.epub or .pdf</p>
+        <p className="text-[12px] text-muted">.epub</p>
       </div>
     </div>
   );

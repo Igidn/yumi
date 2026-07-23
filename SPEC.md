@@ -4,7 +4,7 @@
 
 **Import**
 - Drag-and-drop one or multiple files onto the app window or dock icon.
-- Supported formats: PDF, EPUB. More added as conversion pipelines mature.
+- Supported formats: EPUB.
 - On import: file is copied to internal storage (`~/Library/Application Support/[app]/books/`). Original is untouched. This is the backup.
 - Duplicate detection by filename + file hash. Offers to skip or replace.
 
@@ -27,9 +27,9 @@
 ## 2. Reading Surface
 
 **Text Rendering**
-- Formatted text preserving spatial layout from OCR (indentation, paragraph spacing, line breaks).
+- Formatted text preserving original layout (indentation, paragraph spacing, line breaks).
 - Inline LaTeX equations rendered with KaTeX.
-- Inline figures extracted from the original PDF and placed at their original positions.
+- Inline figures extracted from the original book and placed at their original positions.
 - Tables rendered as proper tables, not text art.
 
 **Agent Annotations**
@@ -40,7 +40,7 @@
 - User can delete any annotation (both pre-generated and on-demand).
 
 **Figures & Media**
-- Extracted figures displayed inline with captions from original PDF.
+- Extracted figures displayed inline with captions from the original book.
 - Click figure to open full-resolution view in a lightbox.
 - Zoom and pan in lightbox.
 
@@ -266,7 +266,6 @@
 - **App shell**: Electron (mature, no IPC translation layer, browser-native features work as documented)
 - **Frontend**: TypeScript + React (or Svelte, your call)
 - **Database**: SQLite via `better-sqlite3` (synchronous, zero-config, main-thread-safe native bindings)
-- **OCR**: Unlimited-OCR 4-bit GGUF via llama.cpp (runs once on import, out-of-process)
 - **Agent**: Any LLM (OpenRouter API or local) — called during import for pre-expansion, called on-demand for highlight queries
 - **Text rendering**: KaTeX for math + custom React renderer for formatted text
 - **Drawing**: Excalidraw or rough.js Canvas2D overlay
