@@ -2,7 +2,7 @@ import { BrowserWindow, dialog, ipcMain } from "electron";
 import { eq } from "drizzle-orm";
 import { getDb, hasFts5 } from "./database";
 import { appSettings, books } from "./db/schema";
-import { importBook } from "./import";
+import { bookForRenderer, importBook } from "./import";
 import type {
   IPCChannel,
   IPCPayloads,
@@ -54,11 +54,12 @@ export function registerIpcHandlers(): void {
 
   handle("books:list", async () => {
     const db = await getDb();
-    return db
+    const rows = await db
       .select()
       .from(books)
       .where(eq(books.trashed, 0))
       .orderBy(books.title);
+    return rows.map(bookForRenderer);
   });
 
   handle("books:insert", async (_, payload) => {
@@ -74,7 +75,7 @@ export function registerIpcHandlers(): void {
         importedAt: now,
       })
       .returning();
-    return rows[0];
+    return bookForRenderer(rows[0]);
   });
 
   handle("import:book", async (_, payload) => {
