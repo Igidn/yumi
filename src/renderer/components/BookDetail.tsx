@@ -35,10 +35,12 @@ export function BookDetail({
   book,
   onClose,
   onUpdated,
+  onDelete,
 }: {
   book: Book;
   onClose: () => void;
   onUpdated: (book: Book) => void;
+  onDelete?: () => void;
 }) {
   const [draft, setDraft] = useState(book);
   const [editingTitle, setEditingTitle] = useState(false);
@@ -218,13 +220,16 @@ export function BookDetail({
           </div>
         </div>
 
-        {/* ponytail: delete is UI-only until trash/soft-delete lands */}
         <div className="mt-6 flex justify-end border-t border-edge pt-4">
           <button
             type="button"
-            disabled
-            title="Coming soon"
-            className="flex h-[34px] items-center gap-1.5 rounded-[8px] border border-edge bg-field px-3 text-[12px] text-muted opacity-50"
+            onClick={() => {
+              if (window.confirm(`Delete "${draft.title}"?`)) {
+                onDelete?.();
+                onClose();
+              }
+            }}
+            className="flex h-[34px] items-center gap-1.5 rounded-[8px] border border-edge bg-field px-3 text-[12px] text-ink transition-colors hover:bg-page"
           >
             <Trash2 size={14} strokeWidth={1.75} />
             Delete

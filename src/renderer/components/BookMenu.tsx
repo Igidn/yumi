@@ -8,11 +8,13 @@ export function BookMenu({
   onClose,
   onDetails,
   onToggleFinished,
+  onDelete,
 }: {
   menu: MenuState;
   onClose: () => void;
   onDetails: () => void;
   onToggleFinished: () => void;
+  onDelete: () => void;
 }) {
   useEffect(() => {
     const close = () => onClose();
@@ -74,12 +76,13 @@ export function BookMenu({
       >
         Reveal in folder
       </button>
-      {/* ponytail: delete is UI-only until trash/soft-delete lands */}
       <button
         role="menuitem"
-        disabled
-        title="Coming soon"
         className={item}
+        onClick={() => {
+          onDelete();
+          onClose();
+        }}
       >
         Delete
       </button>

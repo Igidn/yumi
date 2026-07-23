@@ -67,6 +67,7 @@ export type IPCChannel =
   | "books:list"
   | "books:insert"
   | "books:update"
+  | "books:delete"
   | "books:reveal"
   | "reader:open"
   | "reader:load"
@@ -98,6 +99,7 @@ export interface IPCPayloads {
     // Absolute path to a new cover image; main copies it into covers/.
     coverSourcePath?: string;
   };
+  "books:delete": { id: number };
   "books:reveal": { id: number };
   // Library → main: open (or focus) the reader window for a book.
   "reader:open": { id: number };
@@ -129,6 +131,7 @@ export interface IPCResponses {
   "books:list": Book[];
   "books:insert": Book;
   "books:update": Book;
+  "books:delete": void;
   "books:reveal": void;
   "reader:open": void;
   "reader:load": ReaderPayload;

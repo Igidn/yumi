@@ -167,7 +167,7 @@ export async function importBook(
 }
 
 /** Delete a book row (cascade clears chapters/notes/drawings) and its files. */
-async function deleteBook(bookId: number): Promise<void> {
+export async function deleteBook(bookId: number): Promise<void> {
   const db = await getDb();
   const row = await db.query.books.findFirst({ where: eq(books.id, bookId) });
   if (!row) return;
