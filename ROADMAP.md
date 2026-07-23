@@ -31,8 +31,8 @@ Spec: §11, §13. The scaffold runs but has gaps that will bite later.
 
 Spec: §1 (import, trash), §2 (typography basics, dark mode), §3 (baseline navigation and progress). First end-to-end value: import a book, read it, resume where you stopped.
 
-- [ ] EPUB parser in the main process: unzip, read OPF spine, split into chapters, convert XHTML to structured blocks (headings, paragraphs) stored in `chapters.rawText`.
-- [ ] Import: drag-and-drop onto the window and dock icon, plus a file dialog. Copy the file into `books/` in the app support directory; the original is untouched.
+- [x] EPUB parser in the main process: unzip, read OPF spine, split into chapters, convert XHTML to structured blocks (headings, paragraphs) stored in `chapters.rawText`.
+- [x] Import: drag-and-drop onto the window and dock icon, plus a file dialog. Copy the file into `books/` in the app support directory; the original is untouched.
 - [x] Duplicate detection by filename plus SHA-256 hash, with a skip/replace prompt.
 - [ ] Library view: cover, title, author; sort by title, author, last opened, import date; live search over title and author.
 - [ ] Reader view: render chapter blocks; font size and line-height controls; dark mode toggle.
