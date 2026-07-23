@@ -1,96 +1,36 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ArrowDownNarrowWide, ArrowUpNarrowWide, Plus, Search } from "lucide-react";
 import type { Book } from "../../shared/types";
-import { useImport } from "../hooks/useImport";
-import { DuplicatePrompt } from "../components/DuplicatePrompt";
+import { BookDetail } from "../components/BookDetail";
+import { BookCard } from "../components/BookCard";
+import { BookMenu, type MenuState } from "../components/BookMenu";
+import { SortMenu } from "../components/SortMenu";
+import { SORT_OPTIONS, compareBooks, type SortKey } from "../library/sort";
 
-function SearchIcon() {
-  return (
-    <svg
-      width="18"
-      height="18"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <circle cx="11" cy="11" r="8" />
-      <path d="m21 21-4.3-4.3" />
-    </svg>
-  );
-}
-
-function PlusIcon() {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <line x1="12" y1="5" x2="12" y2="19" />
-      <line x1="5" y1="12" x2="19" y2="12" />
-    </svg>
-  );
-}
-
-function MoreIcon() {
-  return (
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-      <circle cx="12" cy="5" r="1.5" />
-      <circle cx="12" cy="12" r="1.5" />
-      <circle cx="12" cy="19" r="1.5" />
-    </svg>
-  );
-}
-
-function progressLabel(book: Book): string {
-  return book.progress >= 1
-    ? "Finished"
-    : `${Math.round(book.progress * 100)}%`;
-}
-
-function BookCard({ book, onOpen }: { book: Book; onOpen: () => void }) {
-  return (
-    <div className="w-[170px]">
-      <button
-        onClick={onOpen}
-        className="block h-[261px] w-[170px] overflow-hidden transition-opacity hover:opacity-85 focus-visible:outline-2 focus-visible:outline-muted"
-      >
-        <img
-          src={book.coverPath ?? ""}
-          alt={`${book.title} cover`}
-          className="h-full w-full object-cover"
-          draggable={false}
-        />
-      </button>
-      <div className="mt-[8px] flex h-[24px] items-center justify-between">
-        <span className="text-[12px] text-muted">{progressLabel(book)}</span>
-        <button
-          className="text-muted transition-colors hover:text-ink"
-          aria-label={`More options for ${book.title}`}
-        >
-          <MoreIcon />
-        </button>
-      </div>
-    </div>
-  );
-}
-
-export function LibraryView({ onOpenBook }: { onOpenBook: () => void }) {
+export function LibraryView({
+  onOpenBook,
+  importing,
+  importPaths,
+}: {
+  onOpenBook: () => void;
+  importing: boolean;
+  importPaths: (paths: string[]) => Promise<{
+    ok: number;
+    skipped: number;
+    failed: { path: string; error: string }[];
+  }>;
+}) {
   const [books, setBooks] = useState<Book[]>([]);
   const [query, setQuery] = useState("");
-  const [titleAsc, setTitleAsc] = useState(true);
+  const [sortKey, setSortKey] = useState<SortKey>({
+    field: "title",
+    dir: "asc",
+  });
+  const [sortOpen, setSortOpen] = useState(false);
   const [importMessage, setImportMessage] = useState<string | null>(null);
-  const { importing, importPaths, pendingDuplicate, resolveDuplicate } =
-    useImport();
+  const [detailBookId, setDetailBookId] = useState<number | null>(null);
+  const [menu, setMenu] = useState<MenuState | null>(null);
+  const sortTriggerRef = useRef<HTMLButtonElement | null>(null);
 
   const fetchBooks = () => window.yumi.invoke("books:list").then(setBooks);
 
@@ -123,12 +63,13 @@ export function LibraryView({ onOpenBook }: { onOpenBook: () => void }) {
             book.author.toLowerCase().includes(q),
         )
       : books;
-    return [...filtered].sort((a, b) =>
-      titleAsc
-        ? a.title.localeCompare(b.title)
-        : b.title.localeCompare(a.title),
-    );
-  }, [books, query, titleAsc]);
+    return [...filtered].sort((a, b) => compareBooks(a, b, sortKey));
+  }, [books, query, sortKey]);
+
+  const detailBook =
+    detailBookId === null
+      ? null
+      : (books.find((b) => b.id === detailBookId) ?? null);
 
   const handleImport = async () => {
     setImportMessage(null);
@@ -153,7 +94,7 @@ export function LibraryView({ onOpenBook }: { onOpenBook: () => void }) {
       <div className="mx-auto -mt-3 flex w-full max-w-[551px] gap-[6px] px-4">
         <div className="relative flex-1">
           <span className="pointer-events-none absolute left-[12px] top-1/2 -translate-y-1/2 text-muted">
-            <SearchIcon />
+            <Search size={18} strokeWidth={2} />
           </span>
           <input
             type="text"
@@ -169,15 +110,44 @@ export function LibraryView({ onOpenBook }: { onOpenBook: () => void }) {
           className="app-no-drag flex h-[36px] shrink-0 items-center gap-1.5 rounded-[8px] border border-edge bg-field px-4 text-[12px] text-ink transition-colors hover:text-ink disabled:opacity-60"
           aria-label="Import a book"
         >
-          <PlusIcon />
+          <Plus size={14} strokeWidth={2} />
           <span>{importing ? "Importing…" : "Import"}</span>
         </button>
-        <button
-          onClick={() => setTitleAsc((v) => !v)}
-          className="h-[36px] shrink-0 rounded-[8px] border border-edge bg-field px-4 text-[12px] text-muted transition-colors hover:text-ink"
-        >
-          Sort
-        </button>
+        <div className="relative shrink-0">
+          <button
+            ref={sortTriggerRef}
+            onClick={() => setSortOpen((v) => !v)}
+            aria-haspopup="menu"
+            aria-expanded={sortOpen}
+            className="flex h-[36px] items-center gap-1.5 rounded-[8px] border border-edge bg-field px-3 text-[12px] text-ink transition-colors hover:text-ink"
+          >
+            <span className="text-muted">Sort:</span>
+            <span>
+              {SORT_OPTIONS.find((o) => o.field === sortKey.field)?.label}
+            </span>
+            {sortKey.dir === "asc" ? (
+              <ArrowUpNarrowWide
+                size={13}
+                strokeWidth={1.75}
+                className="text-muted"
+              />
+            ) : (
+              <ArrowDownNarrowWide
+                size={13}
+                strokeWidth={1.75}
+                className="text-muted"
+              />
+            )}
+          </button>
+          {sortOpen && (
+            <SortMenu
+              sortKey={sortKey}
+              onSelect={setSortKey}
+              onClose={() => setSortOpen(false)}
+              anchorRef={sortTriggerRef}
+            />
+          )}
+        </div>
       </div>
 
       {importMessage && (
@@ -189,10 +159,38 @@ export function LibraryView({ onOpenBook }: { onOpenBook: () => void }) {
         </p>
       )}
 
-      {pendingDuplicate && (
-        <DuplicatePrompt
-          pending={pendingDuplicate}
-          onResolve={resolveDuplicate}
+      {detailBook && (
+        <BookDetail
+          book={detailBook}
+          onClose={() => setDetailBookId(null)}
+          onUpdated={(updated) =>
+            setBooks((prev) =>
+              prev.map((b) => (b.id === updated.id ? updated : b)),
+            )
+          }
+        />
+      )}
+
+      {menu && (
+        <BookMenu
+          menu={menu}
+          onClose={() => setMenu(null)}
+          onDetails={() => setDetailBookId(menu.book.id)}
+          onToggleFinished={() => {
+            const finished = menu.book.progress >= 1;
+            void window.yumi
+              .invoke(
+                "books:update",
+                finished
+                  ? { id: menu.book.id, restoreProgress: true }
+                  : { id: menu.book.id, progress: 1 },
+              )
+              .then((updated) =>
+                setBooks((prev) =>
+                  prev.map((b) => (b.id === updated.id ? updated : b)),
+                ),
+              );
+          }}
         />
       )}
 
@@ -204,7 +202,12 @@ export function LibraryView({ onOpenBook }: { onOpenBook: () => void }) {
       ) : (
         <div className="mt-[31px] grid grid-cols-[repeat(auto-fill,170px)] justify-center gap-x-[55px] gap-y-[48px] px-6">
           {visibleBooks.map((book) => (
-            <BookCard key={book.id} book={book} onOpen={onOpenBook} />
+            <BookCard
+              key={book.id}
+              book={book}
+              onOpen={onOpenBook}
+              onMenu={(pos) => setMenu({ book, ...pos })}
+            />
           ))}
         </div>
       )}

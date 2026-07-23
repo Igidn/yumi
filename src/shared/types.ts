@@ -14,6 +14,8 @@ export interface Book {
   importedAt: string;
   lastOpenedAt: string | null;
   progress: number;
+  // Progress before a manual "mark finished"; null when not finished that way.
+  priorProgress: number | null;
   collection: string;
   trashed: number;
 }
@@ -29,8 +31,11 @@ export type IPCChannel =
   | "settings:set"
   | "books:list"
   | "books:insert"
+  | "books:update"
+  | "books:reveal"
   | "import:book"
   | "dialog:openFile"
+  | "dialog:openImage"
   | "db:fts5";
 
 /** Result of an `import:book` call (SPEC §1 duplicate handling). */
@@ -44,6 +49,18 @@ export interface IPCPayloads {
   "settings:set": { key: string; value: string };
   "books:list": void;
   "books:insert": { title: string; author: string; format: BookFormat };
+  "books:update": {
+    id: number;
+    title?: string;
+    author?: string;
+    // 0–1 reading progress; 1 = finished.
+    progress?: number;
+    // Restore progress stashed when the book was marked finished.
+    restoreProgress?: boolean;
+    // Absolute path to a new cover image; main copies it into covers/.
+    coverSourcePath?: string;
+  };
+  "books:reveal": { id: number };
   "import:book": {
     sourcePath: string;
     // Resolution for a detected duplicate. Omit ("prompt") to detect and
@@ -52,6 +69,7 @@ export interface IPCPayloads {
     duplicateHandling?: "skip" | "replace";
   };
   "dialog:openFile": void;
+  "dialog:openImage": void;
   "db:fts5": void;
 }
 
@@ -60,8 +78,11 @@ export interface IPCResponses {
   "settings:set": void;
   "books:list": Book[];
   "books:insert": Book;
+  "books:update": Book;
+  "books:reveal": void;
   "import:book": ImportOutcome;
   "dialog:openFile": string[];
+  "dialog:openImage": string | null;
   "db:fts5": boolean;
 }
 

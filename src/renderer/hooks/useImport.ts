@@ -31,7 +31,6 @@ type Resolve = (action: "skip" | "replace") => void;
  */
 export function useImport() {
   const [importing, setImporting] = useState(false);
-  const [lastResult, setLastResult] = useState<ImportResult | null>(null);
   const [pendingDuplicate, setPendingDuplicate] =
     useState<PendingDuplicate | null>(null);
   // Holds the resolver for the in-flight duplicate prompt. A ref so the
@@ -76,7 +75,6 @@ export function useImport() {
         }
       }
       setImporting(false);
-      setLastResult(result);
       if (result.failed.length > 0) {
         console.error("[import] failures:", result.failed);
       }
@@ -87,7 +85,6 @@ export function useImport() {
 
   return {
     importing,
-    lastResult,
     importPaths,
     pendingDuplicate,
     resolveDuplicate,

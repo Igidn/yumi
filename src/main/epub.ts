@@ -35,6 +35,19 @@ export interface ParsedEpub {
   chapters: ParsedChapter[];
 }
 
+/** Cover bytes pulled out of an EPUB for the library grid. */
+export interface EpubCover {
+  data: Buffer;
+  /** File extension without dot, e.g. "jpg". */
+  ext: string;
+}
+
+export interface EpubMeta {
+  title: string;
+  author: string;
+  cover: EpubCover | null;
+}
+
 const XHTML_NS = "http://www.w3.org/1999/xhtml";
 
 function textOf(node: Element): string {
@@ -147,6 +160,75 @@ function chapterTitle(
   return fallback;
 }
 
+function metadataOf(book: Book): { title: string; author: string } {
+  const meta = (book as any).packaging?.metadata || {};
+  const title: string =
+    meta.title || (meta.dcTitle && meta.dcTitle[""]) || "Untitled";
+  const author: string = meta.creator || "";
+  return { title, author };
+}
+
+function extFromCover(coverHref: string, mime: string | undefined): string {
+  const fromMime: Record<string, string> = {
+    "image/jpeg": "jpg",
+    "image/jpg": "jpg",
+    "image/png": "png",
+    "image/gif": "gif",
+    "image/webp": "webp",
+    "image/svg+xml": "svg",
+  };
+  if (mime && fromMime[mime]) return fromMime[mime];
+  const ext = pathExt(coverHref);
+  return ext || "img";
+}
+
+function pathExt(href: string): string {
+  const clean = stripFragment(href);
+  const base = clean.split("/").pop() || clean;
+  const dot = base.lastIndexOf(".");
+  if (dot < 0) return "";
+  return base.slice(dot + 1).toLowerCase();
+}
+
+async function openEpub(filePath: string): Promise<Book> {
+  const data = await fs.promises.readFile(filePath);
+  const book = new Book(data as any, { openAs: "binary" } as any);
+  await book.opened;
+  // `ready` resolves once spine/metadata/navigation are all loaded.
+  await book.ready;
+  return book;
+}
+
+/** Pull cover image bytes out of an already-opened epubjs Book. */
+async function coverOf(book: Book): Promise<EpubCover | null> {
+  const coverHref = (book as any).cover as string | undefined;
+  if (!coverHref || !book.archive) return null;
+  try {
+    const blob: Blob | undefined = await book.archive.getBlob(coverHref);
+    if (!blob) return null;
+    const data = Buffer.from(await blob.arrayBuffer());
+    if (data.length === 0) return null;
+    return { data, ext: extFromCover(coverHref, blob.type) };
+  } catch {
+    // ponytail: missing/unreadable cover is fine — library shows a placeholder.
+    return null;
+  }
+}
+
+/**
+ * Lightweight import-time read: title, author, cover. Skips chapter parsing.
+ */
+export async function readEpubMeta(filePath: string): Promise<EpubMeta> {
+  const book = await openEpub(filePath);
+  try {
+    const { title, author } = metadataOf(book);
+    const cover = await coverOf(book);
+    return { title, author, cover };
+  } finally {
+    book.destroy();
+  }
+}
+
 /**
  * Parse an EPUB file from disk into structured chapters.
  *
@@ -156,22 +238,15 @@ function chapterTitle(
  * @param filePath absolute path to a .epub
  */
 export async function parseEpub(filePath: string): Promise<ParsedEpub> {
-  const data = await fs.promises.readFile(filePath);
-
-  const book = new Book(data as any, { openAs: "binary" } as any);
-  await book.opened;
-  // `ready` resolves once spine/metadata/navigation are all loaded.
-  await book.ready;
-
-  const meta = (book as any).packaging?.metadata || {};
-  const title: string =
-    meta.title || (meta.dcTitle && meta.dcTitle[""]) || "Untitled";
-  const author: string = meta.creator || "";
+  const book = await openEpub(filePath);
+  const { title, author } = metadataOf(book);
 
   // Build a href→label index from the EPUB navigation so chapter titles come
   // from the TOC the M1 sidebar will render, not the file's own <title>.
   const nav = (await book.loaded.navigation) as any;
-  const navIndex = nav?.toc ? buildNavIndex(nav.toc as NavItem[]) : new Map<string, string>();
+  const navIndex = nav?.toc
+    ? buildNavIndex(nav.toc as NavItem[])
+    : new Map<string, string>();
 
   // Collect spine sections in order, skipping non-linear (cover, etc.).
   const spineItems: SpineItemLike[] = [];
@@ -182,7 +257,6 @@ export async function parseEpub(filePath: string): Promise<ParsedEpub> {
   const chapters: ParsedChapter[] = [];
   for (let i = 0; i < spineItems.length; i++) {
     const section = spineItems[i];
-    const fallback = `Chapter ${i + 1}`;
     let doc: Document;
     try {
       // book.load routes through archive.request (no XHR) since archived=true.
@@ -221,6 +295,10 @@ async function main(): Promise<void> {
     console.error("usage: tsx src/main/epub.ts <file.epub>");
     process.exit(1);
   }
+  const meta = await readEpubMeta(file);
+  console.log(
+    `meta title="${meta.title}" author="${meta.author}" cover=${meta.cover ? meta.cover.ext + " " + meta.cover.data.length + "b" : "none"}`
+  );
   const parsed = await parseEpub(file);
   console.log(
     `title="${parsed.title}" author="${parsed.author}" chapters=${parsed.chapters.length}`
@@ -232,6 +310,7 @@ async function main(): Promise<void> {
     console.log(`  first block: ${JSON.stringify(blocks[0])}`);
   }
   assert(parsed.chapters.length > 0, "parsed chapters empty");
+  assert(parsed.title === meta.title, "meta/parse title mismatch");
   console.log("OK");
 }
 

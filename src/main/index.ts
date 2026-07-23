@@ -1,10 +1,27 @@
-import { app, BrowserWindow } from "electron";
+import { app, BrowserWindow, net, protocol } from "electron";
 import path from "path";
+import { pathToFileURL } from "url";
 import { registerIpcHandlers, broadcastEvent } from "./ipc";
 import { getStore } from "./store";
 import { importBook } from "./import";
+import { getUserDataPath } from "./paths";
 
 const isDev = process.env.NODE_ENV !== "production";
+
+// Must run before app is ready. Lets <img src="yumi://asset/..."> load covers
+// from the userData directory (renderer can't use bare file:// paths).
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: "yumi",
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      bypassCSP: true,
+      stream: true,
+    },
+  },
+]);
 
 /**
  * macOS delivers `open-file` events for Finder/dock drops. They can fire
@@ -102,7 +119,25 @@ async function createWindow() {
   }
 }
 
+function registerAssetProtocol(): void {
+  protocol.handle("yumi", (request) => {
+    const url = new URL(request.url);
+    if (url.hostname !== "asset") {
+      return new Response("Not found", { status: 404 });
+    }
+    const rel = decodeURIComponent(url.pathname.replace(/^\//, ""));
+    const root = getUserDataPath();
+    const full = path.normalize(path.join(root, rel));
+    // Stay inside userData — no path traversal out to the rest of the disk.
+    if (full !== root && !full.startsWith(root + path.sep)) {
+      return new Response("Forbidden", { status: 403 });
+    }
+    return net.fetch(pathToFileURL(full).href);
+  });
+}
+
 app.whenReady().then(async () => {
+  registerAssetProtocol();
   registerIpcHandlers();
   await createWindow();
 });

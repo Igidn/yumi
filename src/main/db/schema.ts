@@ -12,6 +12,8 @@ export const books = sqliteTable("books", {
   importedAt: text("imported_at").notNull(),
   lastOpenedAt: text("last_opened_at"),
   progress: real("progress").notNull().default(0), // 0–1 fraction
+  // Progress before a manual "mark finished"; restored by "still reading".
+  priorProgress: real("prior_progress"),
   collection: text("collection").notNull().default(""),
   trashed: integer("trashed").notNull().default(0), // boolean
 });

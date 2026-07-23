@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import { getUserDataPath } from "./paths";
 import { getDb } from "./database";
 import { books } from "./db/schema";
+import { readEpubMeta } from "./epub";
 import type { Book, BookFormat, ImportOutcome } from "../shared/types";
 
 const SUPPORTED_EXTENSIONS: Record<string, BookFormat> = {
@@ -17,6 +18,29 @@ export function getBooksDir(): string {
   const dir = path.join(getUserDataPath(), "books");
   fs.mkdirSync(dir, { recursive: true });
   return dir;
+}
+
+/** Return `<userData>/covers`, creating the directory if it does not exist. */
+export function getCoversDir(): string {
+  const dir = path.join(getUserDataPath(), "covers");
+  fs.mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
+/**
+ * Rewrite a stored absolute cover path into a `yumi://asset/...` URL the
+ * renderer can load via the custom protocol registered in `index.ts`.
+ */
+export function coverUrlForRenderer(coverPath: string | null): string | null {
+  if (!coverPath) return null;
+  const root = getUserDataPath();
+  const rel = path.relative(root, coverPath);
+  if (!rel || rel.startsWith("..") || path.isAbsolute(rel)) return null;
+  return `yumi://asset/${rel.split(path.sep).map(encodeURIComponent).join("/")}`;
+}
+
+export function bookForRenderer(book: Book): Book {
+  return { ...book, coverPath: coverUrlForRenderer(book.coverPath) };
 }
 
 export function getFormatForFile(filePath: string): BookFormat | null {
@@ -106,10 +130,10 @@ export async function importBook(
   // trash ever holds large duplicates, otherwise the empty-trash purge cleans up.
   if (existing && !existing.trashed) {
     if (duplicateHandling === "prompt") {
-      return { status: "duplicate", existingBook: existing };
+      return { status: "duplicate", existingBook: bookForRenderer(existing) };
     }
     if (duplicateHandling === "skip") {
-      return { status: "skipped", existingBook: existing };
+      return { status: "skipped", existingBook: bookForRenderer(existing) };
     }
     // "replace": drop the existing book row (cascade) and its copied file,
     // then fall through to a fresh import below.
@@ -120,28 +144,48 @@ export async function importBook(
   const dest = uniqueDestination(destDir, path.basename(abs));
   await fs.promises.copyFile(abs, dest);
 
-  const title = path.basename(abs, path.extname(abs));
+  // Filename fallback; EPUB meta overwrites title/author/cover below.
+  let title = path.basename(abs, path.extname(abs));
+  let author = "";
+  let coverPath: string | null = null;
+
+  if (format === "epub") {
+    try {
+      const meta = await readEpubMeta(dest);
+      if (meta.title) title = meta.title;
+      author = meta.author || "";
+      if (meta.cover) {
+        coverPath = path.join(getCoversDir(), `${hash}.${meta.cover.ext}`);
+        await fs.promises.writeFile(coverPath, meta.cover.data);
+      }
+    } catch (err) {
+      // Book file is already copied; keep the filename title rather than
+      // failing the whole import over a bad OPF/cover.
+      console.error("[import] epub meta failed:", dest, err);
+    }
+  }
+
   const rows = await db
     .insert(books)
     .values({
       title,
-      author: "",
+      author,
       format,
       sourcePath: dest,
       sha256: hash,
+      coverPath,
       importedAt: new Date().toISOString(),
     })
     .returning();
-  return { status: "imported", book: rows[0] };
+  return { status: "imported", book: bookForRenderer(rows[0]) };
 }
 
-/** Delete a book row (cascade clears chapters/notes/drawings) and its copied file. */
+/** Delete a book row (cascade clears chapters/notes/drawings) and its files. */
 async function deleteBook(bookId: number): Promise<void> {
   const db = await getDb();
   const row = await db.query.books.findFirst({ where: eq(books.id, bookId) });
   if (!row) return;
   await db.delete(books).where(eq(books.id, bookId));
-  if (row.sourcePath) {
-    fs.rmSync(row.sourcePath, { force: true });
-  }
+  if (row.sourcePath) fs.rmSync(row.sourcePath, { force: true });
+  if (row.coverPath) fs.rmSync(row.coverPath, { force: true });
 }

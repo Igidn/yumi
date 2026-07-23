@@ -15,6 +15,13 @@
       "when": 1784745289700,
       "tag": "0001_furry_richard_fisk",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1784796900286,
+      "tag": "0002_red_moonstone",
+      "breakpoints": true
     }
   ]
 }
