@@ -120,6 +120,15 @@
   break-inside: avoid;
 }
 
+/* Images inside reader content: fit the column, stay sharp. */
+.reader-content img.reader-image {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0.75em auto;
+  break-inside: avoid;
+}
+
 /* Flash-highlight for the block a search result jumped to. */
 @keyframes reader-flash {
   0% {

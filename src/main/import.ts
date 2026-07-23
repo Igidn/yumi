@@ -188,4 +188,7 @@ async function deleteBook(bookId: number): Promise<void> {
   await db.delete(books).where(eq(books.id, bookId));
   if (row.sourcePath) fs.rmSync(row.sourcePath, { force: true });
   if (row.coverPath) fs.rmSync(row.coverPath, { force: true });
+  // ponytail: best-effort cleanup of extracted images.
+  const imageDir = path.join(getCoversDir(), String(bookId), "images");
+  fs.rmSync(imageDir, { recursive: true, force: true });
 }

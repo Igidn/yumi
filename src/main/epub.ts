@@ -1,4 +1,5 @@
 import fs from "fs";
+import path from "path";
 
 // epubjs is a browser library: its Archive.getText reaches for
 // `window.decodeURIComponent`. In the main process there is no window, so
@@ -13,6 +14,7 @@ if (typeof (globalThis as any).window === "undefined") {
 
 import { Book, NavItem } from "epubjs";
 import type { ContentBlock } from "../shared/types";
+import { getCoversDir } from "./import";
 
 export type { ContentBlock };
 
@@ -119,12 +121,49 @@ function makeBlock(
   return block;
 }
 
+/** Resolve a relative href against a base spine item path. */
+function resolveHref(base: string, rel: string): string {
+  const baseDir = base.includes("/") ? base.substring(0, base.lastIndexOf("/") + 1) : "";
+  const parts = (baseDir + rel).split("/");
+  const resolved: string[] = [];
+  for (const part of parts) {
+    if (part === "..") resolved.pop();
+    else if (part !== "." && part !== "") resolved.push(part);
+  }
+  return resolved.join("/");
+}
+
+/**
+ * Build a case-insensitive map from lowercase path → actual path for every
+ * file in the EPUB archive. Many EPUBs (especially those authored on
+ * case-insensitive file systems) reference `Images/photo.jpg` when the ZIP
+ * entry is `images/photo.jpg` — epubjs does exact matches, so lookups fail.
+ */
+function buildFileMap(archive: any): Map<string, string> {
+  const map = new Map<string, string>();
+  const jszip = archive.zip;
+  if (!jszip) return map;
+  for (const key of Object.keys(jszip.files || {})) {
+    if (jszip.files[key].dir) continue;
+    // Normalize away leading/trailing slashes that JSZip may attach.
+    const clean = key.replace(/^\/+/, "").replace(/\/+$/, "");
+    if (clean) map.set(clean.toLowerCase(), clean);
+  }
+  return map;
+}
+
 /**
  * Walk the body of an XHTML document and emit structured blocks:
- * headings (h1–h6) and paragraphs. Nested block children of <p> collapse into
- * the paragraph text. <br> inside a paragraph becomes a line break in html.
+ * headings (h1–h6), paragraphs, and images. Nested block children of <p>
+ * collapse into the paragraph text. <br> inside a paragraph becomes a line
+ * break in html. <img> elements become image blocks when their src resolves
+ * to a key in imageMap.
  */
-function extractBlocks(doc: Document): ContentBlock[] {
+function extractBlocks(
+  doc: Document,
+  imageMap?: Map<string, string>,
+  docHref?: string
+): ContentBlock[] {
   const body =
     doc.getElementsByTagName("body")[0] ||
     doc.documentElement.getElementsByTagName("body")[0];
@@ -132,6 +171,20 @@ function extractBlocks(doc: Document): ContentBlock[] {
 
   const blocks: ContentBlock[] = [];
   const skip = new Set(["script", "style", "head", "title", "meta", "link"]);
+
+  function imageBlock(img: Element): ContentBlock | null {
+    if (!imageMap || !docHref) return null;
+    const src = img.getAttribute("src");
+    if (!src) return null;
+    const resolved = resolveHref(docHref, src);
+    const savedPath = imageMap.get(resolved);
+    if (!savedPath) return null;
+    return {
+      type: "image",
+      text: (img.getAttribute("alt") || "").replace(/\s+/g, " ").trim(),
+      src: savedPath,
+    };
+  }
 
   function walk(el: Element): void {
     for (let i = 0; i < el.childNodes.length; i++) {
@@ -151,7 +204,28 @@ function extractBlocks(doc: Document): ContentBlock[] {
       }
 
       if (nsLocal === "p" || nsLocal === "blockquote") {
+        // If the only meaningful content is an image, emit an image block.
+        const imgs = node.getElementsByTagName("img");
+        if (imgs.length > 0 && !textOf(node)) {
+          const block = imageBlock(imgs[0]);
+          if (block) blocks.push(block);
+          continue;
+        }
         const block = makeBlock("paragraph", node);
+        if (block) blocks.push(block);
+        continue;
+      }
+
+      if (nsLocal === "img") {
+        const block = imageBlock(node);
+        if (block) blocks.push(block);
+        continue;
+      }
+
+      // <figure> commonly wraps an <img>; grab the first img inside.
+      if (nsLocal === "figure") {
+        const imgs = node.getElementsByTagName("img");
+        const block = imgs.length > 0 ? imageBlock(imgs[0]) : null;
         if (block) blocks.push(block);
         continue;
       }
@@ -317,9 +391,17 @@ export async function readEpubMeta(filePath: string): Promise<EpubMeta> {
  * Flow: read file → epubjs opens the zip + OPF → read spine in order →
  * load each section's XHTML from the archive → DOM-walk into blocks.
  *
+ * When `bookId` is provided, images referenced in the XHTML are extracted
+ * from the archive and saved to `<userData>/covers/<bookId>/images/` so the
+ * renderer can load them via the `yumi://asset/` protocol.
+ *
  * @param filePath absolute path to a .epub
+ * @param bookId database id, used as the image storage key
  */
-export async function parseEpub(filePath: string): Promise<ParsedEpub> {
+export async function parseEpub(
+  filePath: string,
+  bookId?: number
+): Promise<ParsedEpub> {
   const book = await openEpub(filePath);
   const { title, author } = metadataOf(book);
 
@@ -356,6 +438,32 @@ export async function parseEpub(filePath: string): Promise<ParsedEpub> {
     if (!spineByHref.has(base)) spineByHref.set(base, item);
   });
 
+  // Case-insensitive file map: many EPUBs (especially those authored on
+  // Windows/macOS) reference files with different casing than the ZIP.
+  const fileMap = bookId !== undefined ? buildFileMap(book.archive) : null;
+
+  /** Like book.archive.getBlob, but falls back to case-insensitive lookup. */
+  async function getImageBlob(href: string): Promise<Blob | null> {
+    // epubjs getBlob does url.substr(1) internally, so it needs a leading /.
+    const path = href.startsWith("/") ? href : `/${href}`;
+    const direct = await book.archive.getBlob(path);
+    if (direct) return direct;
+    if (!fileMap) return null;
+    const actual = fileMap.get(href.toLowerCase());
+    if (!actual || actual === href) return null;
+    const actualPath = actual.startsWith("/") ? actual : `/${actual}`;
+    return (await book.archive.getBlob(actualPath)) ?? null;
+  }
+
+  // Book-wide image extraction state — shared across all chapters so
+  // an image referenced from multiple chapters is only extracted once.
+  const imageMap = new Map<string, string>();
+  const imageDir =
+    bookId !== undefined
+      ? path.join(getCoversDir(), String(bookId), "images")
+      : null;
+  if (imageDir) fs.mkdirSync(imageDir, { recursive: true });
+
   const chapters: ParsedChapter[] = [];
   if (flatNav.length > 0) {
     for (let i = 0; i < flatNav.length; i++) {
@@ -371,6 +479,7 @@ export async function parseEpub(filePath: string): Promise<ParsedEpub> {
       const nextStartIndex = nextStartHref
         ? spineByHref.get(nextStartHref)?.index ?? spineItems.length
         : spineItems.length;
+
       const allBlocks: ContentBlock[] = [];
       for (const item of spineItems) {
         if (item.index < startItem.index) continue;
@@ -383,7 +492,42 @@ export async function parseEpub(filePath: string): Promise<ParsedEpub> {
           // ponytail: skip unreadable spine items rather than aborting the book.
           continue;
         }
-        allBlocks.push(...extractBlocks(doc));
+
+        // Extract images from this spine doc before DOM-walking.
+        if (imageDir) {
+          const imgs = doc.getElementsByTagName("img");
+          // book.resolve() gives the full path from ZIP root, e.g.
+          // text/cover.xhtml → /OEBPS/text/cover.xhtml. Strip the
+          // leading / so resolveHref can compute relative paths.
+          const docFullPath = book.resolve(item.href).replace(/^\/+/, "");
+          for (let i = 0; i < imgs.length; i++) {
+            const src = imgs[i].getAttribute("src");
+            if (!src) continue;
+            const resolved = resolveHref(docFullPath, src);
+            if (imageMap.has(resolved)) continue;
+            try {
+              const blob = await getImageBlob(resolved);
+              if (blob && blob.size > 0) {
+                const ext = pathExt(resolved) || "jpg";
+                const filename = `${imageMap.size}.${ext}`;
+                const dest = path.join(imageDir, filename);
+                await fs.promises.writeFile(
+                  dest,
+                  Buffer.from(await blob.arrayBuffer())
+                );
+                imageMap.set(
+                  resolved,
+                  `covers/${bookId}/images/${filename}`
+                );
+              }
+            } catch {
+              // ponytail: skip unreadable images; the book still renders.
+            }
+          }
+        }
+
+        const docFullPath = book.resolve(item.href).replace(/^\/+/, "");
+        allBlocks.push(...extractBlocks(doc, imageMap, docFullPath));
       }
       if (allBlocks.length === 0) continue;
       chapters.push({
@@ -404,7 +548,38 @@ export async function parseEpub(filePath: string): Promise<ParsedEpub> {
       } catch {
         continue;
       }
-      const blocks = extractBlocks(doc);
+
+      if (imageDir) {
+        const imgs = doc.getElementsByTagName("img");
+        const docFullPath = book.resolve(item.href).replace(/^\/+/, "");
+        for (let j = 0; j < imgs.length; j++) {
+          const src = imgs[j].getAttribute("src");
+          if (!src) continue;
+          const resolved = resolveHref(docFullPath, src);
+          if (imageMap.has(resolved)) continue;
+          try {
+            const blob = await getImageBlob(resolved);
+            if (blob && blob.size > 0) {
+              const ext = pathExt(resolved) || "jpg";
+              const filename = `${imageMap.size}.${ext}`;
+              const dest = path.join(imageDir, filename);
+              await fs.promises.writeFile(
+                dest,
+                Buffer.from(await blob.arrayBuffer())
+              );
+              imageMap.set(
+                resolved,
+                `covers/${bookId}/images/${filename}`
+              );
+            }
+          } catch {
+            // ponytail: skip unreadable images.
+          }
+        }
+      }
+
+      const docFullPath = book.resolve(item.href).replace(/^\/+/, "");
+      const blocks = extractBlocks(doc, imageMap, docFullPath);
       if (blocks.length === 0) continue;
       chapters.push({
         index: chapters.length,

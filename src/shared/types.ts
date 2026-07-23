@@ -28,7 +28,7 @@ export type YumiEvent = "library:changed";
 
 /** A flat, renderer-ready block extracted from a chapter's XHTML. */
 export interface ContentBlock {
-  type: "heading" | "paragraph";
+  type: "heading" | "paragraph" | "image";
   level?: number; // heading level 1–6
   text: string;
   /**
@@ -38,6 +38,8 @@ export interface ContentBlock {
    * safe to inject via dangerouslySetInnerHTML.
    */
   html?: string;
+  /** Image blocks only: path relative to userData root, served via yumi://asset/ */
+  src?: string;
 }
 
 /** A chapter as shipped to the reader window (blocks parsed from rawText). */

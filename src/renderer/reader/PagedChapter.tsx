@@ -84,6 +84,20 @@ export function countChapterCols(
   content.appendChild(spacer);
 
   chapter.blocks.forEach((block, i) => {
+    if (block.type === "image" && block.src) {
+      const img = document.createElement("img");
+      img.className = "reader-image";
+      img.src = `yumi://asset/${block.src}`;
+      img.style.width = `${layout.colWidth}px`;
+      img.style.height = "auto";
+      content.appendChild(img);
+      // ponytail: images loaded async won't have height yet; use a
+      // conservative placeholder so column counting isn't wildly off.
+      const ph = document.createElement("div");
+      ph.style.height = `${layout.colWidth * 0.75}px`;
+      content.appendChild(ph);
+      return;
+    }
     if (block.type === "heading") {
       const level = Math.min(6, Math.max(1, block.level ?? 1));
       const el = document.createElement(`h${level}`);
@@ -397,6 +411,18 @@ export function PagedChapter({
             {/* Drop the chapter opener down the page, book-style. */}
             <div aria-hidden style={{ height: 48 }} />
             {chapter.blocks.map((block, i) => {
+              if (block.type === "image" && block.src) {
+                return (
+                  <img
+                    key={i}
+                    data-b={i}
+                    src={`yumi://asset/${block.src}`}
+                    alt={block.text || ""}
+                    className="reader-image"
+                  />
+                );
+              }
+
               const body = block.html ? (
                 <span dangerouslySetInnerHTML={{ __html: block.html }} />
               ) : (

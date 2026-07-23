@@ -30,7 +30,7 @@ async function doParseEpub(
   scrollByTitle?: Map<string, number>
 ) {
   const db = await getDb();
-  const parsed = await parseEpub(sourcePath);
+  const parsed = await parseEpub(sourcePath, bookId);
   for (const chapter of parsed.chapters) {
     await db.insert(chapters).values({
       bookId,
