@@ -155,17 +155,21 @@ export function ReaderView({ bookId }: { bookId: number }) {
     [chapterPos, goToChapter]
   );
 
+  // Fragment to scroll to after the target chapter mounts.
+  const [scrollToFragment, setScrollToFragment] = useState<string | null>(null);
+
   // Hyperlink navigation: push current position, jump to target chapter.
   const handleLinkNavigate = useCallback(
-    (targetChapter: number, _fragment: string | null) => {
+    (targetChapter: number, fragment: string | null) => {
       const fraction = pageInfo?.fraction ?? 0;
       setLinkHistory((prev) => [...prev, { chapterPos, fraction }]);
       setBackButton({ side: targetChapter < chapterPos ? "left" : "right" });
       if (targetChapter === chapterPos) {
-        // Same-chapter link: reposition to start.
-        setReposition({ fraction: 0, nonce: nonceRef.current++ });
+        // Same-chapter link: scroll to fragment.
+        setScrollToFragment(fragment);
       } else {
         goToChapter(targetChapter, 0);
+        setScrollToFragment(fragment);
       }
     },
     [chapterPos, pageInfo?.fraction, goToChapter]
@@ -380,6 +384,7 @@ export function ReaderView({ bookId }: { bookId: number }) {
           initialFraction={landingFraction}
           jump={jump}
           reposition={reposition}
+          scrollToFragment={scrollToFragment}
           onSpreadChange={handleSpreadChange}
           onOverflow={handleOverflow}
           onLinkNavigate={handleLinkNavigate}

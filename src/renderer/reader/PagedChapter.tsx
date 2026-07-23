@@ -180,6 +180,7 @@ export function PagedChapter({
   onSpreadChange,
   onOverflow,
   onLinkNavigate,
+  scrollToFragment,
 }: {
   chapter: ReaderChapter;
   fontSize: number;
@@ -192,6 +193,8 @@ export function PagedChapter({
   onOverflow: (dir: -1 | 1) => void;
   /** User clicked an internal hyperlink with a resolved chapter target. */
   onLinkNavigate?: (chapterIndex: number, fragment: string | null) => void;
+  /** Fragment ID to scroll to after geometry is measured. */
+  scrollToFragment?: string | null;
 }) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -207,6 +210,7 @@ export function PagedChapter({
   const fractionRef = useRef(initialFraction);
   const lastJumpNonce = useRef(0);
   const lastRepositionNonce = useRef(0);
+  const lastFragment = useRef<string | null>(null);
 
   // Chapter switch: drop geometry (hides content) and reseed the position.
   // This is the render-time derived-state reset pattern; the layout effect
@@ -219,6 +223,7 @@ export function PagedChapter({
     fractionRef.current = initialFraction;
     lastJumpNonce.current = 0;
     lastRepositionNonce.current = 0;
+    lastFragment.current = null;
   }
 
   const measure = useCallback(() => {
@@ -340,6 +345,29 @@ export function PagedChapter({
     return () => clearTimeout(timer);
   }, [jump, geom]);
 
+  // Fragment-based scroll: find the element with the matching id and scroll to its spread.
+  useEffect(() => {
+    if (!geom || !scrollToFragment) return;
+    if (scrollToFragment === lastFragment.current) return;
+    lastFragment.current = scrollToFragment;
+    const content = contentRef.current;
+    if (!content) return;
+    const el = content.querySelector<HTMLElement>(
+      `[id="${CSS.escape(scrollToFragment)}"]`
+    );
+    if (!el) return;
+    // Use bounding rect relative to the content container — offsetLeft is
+    // relative to offsetParent, which is wrong for inline targets inside <p>.
+    const contentRect = content.getBoundingClientRect();
+    const elRect = el.getBoundingClientRect();
+    const xOffset = elRect.left - contentRect.left;
+    const target = Math.floor(xOffset / (geom.stride * geom.perSpread));
+    setSpread(Math.min(Math.max(0, target), geom.spreads - 1));
+    el.classList.add("reader-flash");
+    const timer = setTimeout(() => el.classList.remove("reader-flash"), 1700);
+    return () => clearTimeout(timer);
+  }, [geom, scrollToFragment]);
+
   const goNext = useCallback(() => {
     if (!geom) return;
     setAnimate(true);
@@ -402,7 +430,9 @@ export function PagedChapter({
   // Intercept hyperlink clicks on <a data-chapter> elements.
   const handleContentClick = useCallback(
     (e: React.MouseEvent) => {
-      const anchor = (e.target as HTMLElement).closest?.("a[data-chapter]");
+      // e.target may be a text node — walk up to the nearest element first.
+      const el = e.target instanceof Element ? e.target : (e.target as Node).parentElement;
+      const anchor = el?.closest("a[data-chapter]");
       if (!anchor) return;
       e.preventDefault();
       const ch = parseInt(anchor.getAttribute("data-chapter")!, 10);
@@ -451,6 +481,7 @@ export function PagedChapter({
                 return (
                   <img
                     key={i}
+                    id={block.fragment || undefined}
                     data-b={i}
                     src={src}
                     alt={block.text || ""}
@@ -469,7 +500,7 @@ export function PagedChapter({
                 const level = Math.min(6, Math.max(1, block.level ?? 1));
                 const Tag = `h${level}` as "h1";
                 return (
-                  <Tag key={i} data-b={i} className={headingClass(level, i === 0)}>
+                  <Tag key={i} id={block.fragment || undefined} data-b={i} className={headingClass(level, i === 0)}>
                     {body}
                   </Tag>
                 );
@@ -478,7 +509,7 @@ export function PagedChapter({
               // heading; every paragraph after another paragraph is indented.
               const indent = i > 0 && chapter.blocks[i - 1].type === "paragraph";
               return (
-                <p key={i} data-b={i} className={indent ? "reader-indent" : undefined}>
+                <p key={i} id={block.fragment || undefined} data-b={i} className={indent ? "reader-indent" : undefined}>
                   {body}
                 </p>
               );

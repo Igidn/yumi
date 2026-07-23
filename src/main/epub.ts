@@ -100,6 +100,9 @@ function inlineHtml(
       out += "<br/>";
       continue;
     }
+    // Preserve id attribute for fragment-based scroll targets.
+    const elId = el.getAttribute("id");
+    const idAttr = elId ? ` id="${escapeHtmlText(elId)}"` : "";
     const tag = INLINE_TAG_MAP[local];
     if (tag === "a" && linkResolver) {
       const href = el.getAttribute("href");
@@ -108,15 +111,20 @@ function inlineHtml(
         const target = linkResolver(href);
         if (target) {
           const frag = target.fragment ? ` data-fragment="${escapeHtmlText(target.fragment)}"` : "";
-          out += `<a data-chapter="${target.chapterIndex}"${frag} href="${escapeHtmlText(href)}">${inner}</a>`;
+          out += `<a${idAttr} data-chapter="${target.chapterIndex}"${frag} href="${escapeHtmlText(href)}">${inner}</a>`;
           continue;
         }
+      }
+      // Unresolvable link — unwrap but keep id if present (footnote targets).
+      if (elId && inner.trim()) {
+        out += `<a${idAttr}>${inner}</a>`;
+        continue;
       }
       out += inner;
       continue;
     }
     const inner = inlineHtml(el, linkResolver);
-    out += tag && inner.trim() ? `<${tag}>${inner}</${tag}>` : inner;
+    out += tag && inner.trim() ? `<${tag}${idAttr}>${inner}</${tag}>` : inner;
   }
   return out;
 }
@@ -138,7 +146,8 @@ function makeBlock(
   type: ContentBlock["type"],
   node: Element,
   level?: number,
-  linkResolver?: (href: string) => LinkTarget | null
+  linkResolver?: (href: string) => LinkTarget | null,
+  fragment?: string
 ): ContentBlock | null {
   const text = textOf(node);
   if (!text) return null;
@@ -146,6 +155,10 @@ function makeBlock(
   const block: ContentBlock = { type, text };
   if (level !== undefined) block.level = level;
   if (html.includes("<")) block.html = html;
+  // Use the element's own id first, then an inherited ancestor fragment.
+  // (Inline descendant ids are preserved in the html string by inlineHtml.)
+  const id = node.getAttribute("id") || fragment;
+  if (id) block.fragment = id;
   return block;
 }
 
@@ -201,21 +214,28 @@ function extractBlocks(
   const blocks: ContentBlock[] = [];
   const skip = new Set(["script", "style", "head", "title", "meta", "link"]);
 
-  function imageBlock(img: Element): ContentBlock | null {
+  function imageBlock(img: Element, fragment?: string): ContentBlock | null {
     if (!imageMap || !docHref) return null;
     const src = img.getAttribute("src");
     if (!src) return null;
     const resolved = resolveHref(docHref, src);
     const savedPath = imageMap.get(resolved);
     if (!savedPath) return null;
-    return {
+    const block: ContentBlock = {
       type: "image",
       text: (img.getAttribute("alt") || "").replace(/\s+/g, " ").trim(),
       src: savedPath,
     };
+    const id = img.getAttribute("id") || fragment;
+    if (id) block.fragment = id;
+    return block;
   }
 
-  function walk(el: Element): void {
+  function walk(el: Element, ancestorFragment?: string): void {
+    // If this element has an id, it becomes the fragment for descendant blocks.
+    const ownId = el.getAttribute("id") || undefined;
+    const childFragment = ownId || ancestorFragment;
+
     for (let i = 0; i < el.childNodes.length; i++) {
       const child = el.childNodes[i];
       if (child.nodeType !== 1) continue; // elements only
@@ -227,7 +247,7 @@ function extractBlocks(
       if (skip.has(nsLocal)) continue;
 
       if (/^h[1-6]$/.test(nsLocal)) {
-        const block = makeBlock("heading", node, +nsLocal[1], linkResolver);
+        const block = makeBlock("heading", node, +nsLocal[1], linkResolver, childFragment);
         if (block) blocks.push(block);
         continue;
       }
@@ -236,17 +256,17 @@ function extractBlocks(
         // If the only meaningful content is an image, emit an image block.
         const imgs = node.getElementsByTagName("img");
         if (imgs.length > 0 && !textOf(node)) {
-          const block = imageBlock(imgs[0]);
+          const block = imageBlock(imgs[0], childFragment);
           if (block) blocks.push(block);
           continue;
         }
-        const block = makeBlock("paragraph", node, undefined, linkResolver);
+        const block = makeBlock("paragraph", node, undefined, linkResolver, childFragment);
         if (block) blocks.push(block);
         continue;
       }
 
       if (nsLocal === "img") {
-        const block = imageBlock(node);
+        const block = imageBlock(node, childFragment);
         if (block) blocks.push(block);
         continue;
       }
@@ -254,7 +274,7 @@ function extractBlocks(
       // <figure> commonly wraps an <img>; grab the first img inside.
       if (nsLocal === "figure") {
         const imgs = node.getElementsByTagName("img");
-        const block = imgs.length > 0 ? imageBlock(imgs[0]) : null;
+        const block = imgs.length > 0 ? imageBlock(imgs[0], childFragment) : null;
         if (block) blocks.push(block);
         continue;
       }
@@ -262,12 +282,12 @@ function extractBlocks(
       // Unrecognized block: recurse — catches sections, divs, lists.
       // Lists become paragraphs per item to keep prose readable.
       if (nsLocal === "li") {
-        const block = makeBlock("paragraph", node, undefined, linkResolver);
+        const block = makeBlock("paragraph", node, undefined, linkResolver, childFragment);
         if (block) blocks.push(block);
         continue;
       }
 
-      walk(node);
+      walk(node, childFragment);
     }
   }
 
@@ -521,7 +541,8 @@ export async function parseEpub(
         if (item.index < startItem.index) continue;
         if (item.index >= nextStartIndex) break;
         // Record spine→chapter mapping for link resolution.
-        spineToChapter.set(stripFragment(item.href), chapters.length);
+        const spineHref = book.resolve(item.href).replace(/^\/+/, "");
+        spineToChapter.set(stripFragment(spineHref), chapters.length);
         let doc: Document;
         try {
           // book.load routes through archive.request (no XHR) since archived=true.
@@ -598,7 +619,8 @@ export async function parseEpub(
       } catch {
         continue;
       }
-        spineToChapter.set(stripFragment(item.href), chapters.length);
+        const spineHref = book.resolve(item.href).replace(/^\/+/, "");
+        spineToChapter.set(stripFragment(spineHref), chapters.length);
 
       if (imageDir) {
         const imgs = doc.getElementsByTagName("img");

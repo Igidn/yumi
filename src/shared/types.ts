@@ -40,6 +40,8 @@ export interface ContentBlock {
   html?: string;
   /** Image blocks only: path relative to userData root, served via yumi://asset/ */
   src?: string;
+  /** Fragment anchor ID from the source XHTML — used for hyperlink scroll targets. */
+  fragment?: string;
 }
 
 /** A chapter as shipped to the reader window (blocks parsed from rawText). */
