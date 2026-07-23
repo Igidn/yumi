@@ -1,5 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
-import { EllipsisVertical, Plus, Search } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  ArrowDownNarrowWide,
+  ArrowUpNarrowWide,
+  Check,
+  EllipsisVertical,
+  Plus,
+  Search,
+} from "lucide-react";
 import type { Book } from "../../shared/types";
 import { useImport } from "../hooks/useImport";
 import { DuplicatePrompt } from "../components/DuplicatePrompt";
@@ -25,6 +32,21 @@ function CoverPlaceholder({ title, author }: { title: string; author: string }) 
 }
 
 type MenuState = { book: Book; x: number; y: number };
+
+type SortField = "title" | "author" | "recent" | "progress" | "importedAt";
+type SortDir = "asc" | "desc";
+type SortKey = { field: SortField; dir: SortDir };
+
+// Date-based fields read better newest-first; string-based read better
+// A→Z. Clicking the same field again flips the direction.
+const SORT_OPTIONS: { field: SortField; label: string; defaultDir: SortDir }[] =
+  [
+    { field: "title", label: "Title", defaultDir: "asc" },
+    { field: "author", label: "Author", defaultDir: "asc" },
+    { field: "recent", label: "Recent", defaultDir: "desc" },
+    { field: "progress", label: "Read Progress", defaultDir: "desc" },
+    { field: "importedAt", label: "Date added", defaultDir: "desc" },
+  ];
 
 function BookCard({
   book,
@@ -164,13 +186,164 @@ function BookMenu({
   );
 }
 
+// Sort comparator. Date-based fields push missing values to the end regardless
+// of direction so "never opened" never crowds the top of Recent.
+function compareBooks(a: Book, b: Book, key: SortKey): number {
+  const sign = key.dir === "asc" ? 1 : -1;
+  const byTitle = a.title.localeCompare(b.title);
+  switch (key.field) {
+    case "title":
+      return sign * a.title.localeCompare(b.title);
+    case "author": {
+      // Missing authors sink so they don't bunch up at "A" / "Z".
+      const aEmpty = a.author.trim() === "";
+      const bEmpty = b.author.trim() === "";
+      if (aEmpty !== bEmpty) return aEmpty ? 1 : -1;
+      const byAuthor = a.author.localeCompare(b.author);
+      return byAuthor !== 0 ? sign * byAuthor : byTitle;
+    }
+    case "recent": {
+      const aTs = a.lastOpenedAt;
+      const bTs = b.lastOpenedAt;
+      if (!aTs && !bTs) return byTitle;
+      if (!aTs) return 1;
+      if (!bTs) return -1;
+      return aTs < bTs ? sign : aTs > bTs ? -sign : 0;
+    }
+    case "progress": {
+      // Tie-break by title so equal-progress books don't shuffle every render.
+      if (a.progress !== b.progress) return sign * (a.progress - b.progress);
+      return byTitle;
+    }
+    case "importedAt": {
+      if (a.importedAt < b.importedAt) return sign;
+      if (a.importedAt > b.importedAt) return -sign;
+      return 0;
+    }
+  }
+}
+
+function SortMenu({
+  sortKey,
+  onSelect,
+  onClose,
+  anchorRef,
+}: {
+  sortKey: SortKey;
+  onSelect: (key: SortKey) => void;
+  onClose: () => void;
+  anchorRef: React.RefObject<HTMLElement | null>;
+}) {
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
+
+  // Anchor the menu under the trigger button. Recompute on open and on
+  // resize so it follows the trigger if the window changes.
+  useEffect(() => {
+    const place = () => {
+      const anchor = anchorRef.current;
+      if (!anchor) return;
+      const r = anchor.getBoundingClientRect();
+      setPos({ left: r.right, top: r.bottom + 4 });
+    };
+    place();
+    window.addEventListener("resize", place);
+    return () => window.removeEventListener("resize", place);
+  }, [anchorRef]);
+
+  useEffect(() => {
+    const onPointer = (e: PointerEvent) => {
+      const t = e.target as Node | null;
+      if (!t) return;
+      if (menuRef.current?.contains(t)) return;
+      if (anchorRef.current?.contains(t)) return;
+      onClose();
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    // Next tick so the click that opened the menu doesn't close it.
+    const id = setTimeout(() => {
+      window.addEventListener("pointerdown", onPointer);
+      window.addEventListener("keydown", onKey);
+    }, 0);
+    return () => {
+      clearTimeout(id);
+      window.removeEventListener("pointerdown", onPointer);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [onClose, anchorRef]);
+
+  const item =
+    "flex w-full items-center gap-2 px-3 py-1.5 text-left text-[12px] text-ink transition-colors hover:bg-field";
+
+  return (
+    <div
+      ref={menuRef}
+      role="menu"
+      aria-label="Sort by"
+      className="fixed z-50 min-w-[180px] overflow-hidden rounded-[8px] border border-edge bg-shell py-1 shadow-shell"
+      style={pos ?? { left: -9999, top: -9999 }}
+      onPointerDown={(e) => e.stopPropagation()}
+    >
+      {SORT_OPTIONS.map((opt) => {
+        const active = sortKey.field === opt.field;
+        return (
+          <button
+            key={opt.field}
+            role="menuitemradio"
+            aria-checked={active}
+            className={item}
+            onClick={() => {
+              // Re-clicking the active field flips the direction.
+              onSelect(
+                active
+                  ? {
+                      field: opt.field,
+                      dir: sortKey.dir === "asc" ? "desc" : "asc",
+                    }
+                  : { field: opt.field, dir: opt.defaultDir },
+              );
+            }}
+          >
+            <span className="flex h-[14px] w-[14px] shrink-0 items-center justify-center text-muted">
+              {active ? <Check size={12} strokeWidth={2.25} /> : null}
+            </span>
+            <span className="flex-1">{opt.label}</span>
+            {active ? (
+              sortKey.dir === "asc" ? (
+                <ArrowUpNarrowWide
+                  size={14}
+                  strokeWidth={1.75}
+                  className="text-muted"
+                />
+              ) : (
+                <ArrowDownNarrowWide
+                  size={14}
+                  strokeWidth={1.75}
+                  className="text-muted"
+                />
+              )
+            ) : null}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export function LibraryView({ onOpenBook }: { onOpenBook: () => void }) {
   const [books, setBooks] = useState<Book[]>([]);
   const [query, setQuery] = useState("");
-  const [titleAsc, setTitleAsc] = useState(true);
+  const [sortKey, setSortKey] = useState<SortKey>({
+    field: "title",
+    dir: "asc",
+  });
+  const [sortOpen, setSortOpen] = useState(false);
   const [importMessage, setImportMessage] = useState<string | null>(null);
   const [detailBookId, setDetailBookId] = useState<number | null>(null);
   const [menu, setMenu] = useState<MenuState | null>(null);
+  const sortTriggerRef = useRef<HTMLButtonElement | null>(null);
   const { importing, importPaths, pendingDuplicate, resolveDuplicate } =
     useImport();
 
@@ -205,12 +378,8 @@ export function LibraryView({ onOpenBook }: { onOpenBook: () => void }) {
             book.author.toLowerCase().includes(q),
         )
       : books;
-    return [...filtered].sort((a, b) =>
-      titleAsc
-        ? a.title.localeCompare(b.title)
-        : b.title.localeCompare(a.title),
-    );
-  }, [books, query, titleAsc]);
+    return [...filtered].sort((a, b) => compareBooks(a, b, sortKey));
+  }, [books, query, sortKey]);
 
   const detailBook =
     detailBookId === null
@@ -259,12 +428,41 @@ export function LibraryView({ onOpenBook }: { onOpenBook: () => void }) {
           <Plus size={14} strokeWidth={2} />
           <span>{importing ? "Importing…" : "Import"}</span>
         </button>
-        <button
-          onClick={() => setTitleAsc((v) => !v)}
-          className="h-[36px] shrink-0 rounded-[8px] border border-edge bg-field px-4 text-[12px] text-muted transition-colors hover:text-ink"
-        >
-          Sort
-        </button>
+        <div className="relative shrink-0">
+          <button
+            ref={sortTriggerRef}
+            onClick={() => setSortOpen((v) => !v)}
+            aria-haspopup="menu"
+            aria-expanded={sortOpen}
+            className="flex h-[36px] items-center gap-1.5 rounded-[8px] border border-edge bg-field px-3 text-[12px] text-ink transition-colors hover:text-ink"
+          >
+            <span className="text-muted">Sort:</span>
+            <span>
+              {SORT_OPTIONS.find((o) => o.field === sortKey.field)?.label}
+            </span>
+            {sortKey.dir === "asc" ? (
+              <ArrowUpNarrowWide
+                size={13}
+                strokeWidth={1.75}
+                className="text-muted"
+              />
+            ) : (
+              <ArrowDownNarrowWide
+                size={13}
+                strokeWidth={1.75}
+                className="text-muted"
+              />
+            )}
+          </button>
+          {sortOpen && (
+            <SortMenu
+              sortKey={sortKey}
+              onSelect={setSortKey}
+              onClose={() => setSortOpen(false)}
+              anchorRef={sortTriggerRef}
+            />
+          )}
+        </div>
       </div>
 
       {importMessage && (
