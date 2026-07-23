@@ -176,6 +176,9 @@ export function LibraryView({
           menu={menu}
           onClose={() => setMenu(null)}
           onDetails={() => setDetailBookId(menu.book.id)}
+          onDelete={() => {
+            void window.yumi.invoke("books:delete", { id: menu.book.id });
+          }}
           onToggleFinished={() => {
             const finished = menu.book.progress >= 1;
             void window.yumi

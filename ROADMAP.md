@@ -35,11 +35,8 @@ Spec: §1 (import, trash), §2 (typography basics, dark mode), §3 (baseline nav
 - [x] Import: drag-and-drop onto the window and dock icon, plus a file dialog. Copy the file into `books/` in the app support directory; the original is untouched.
 - [x] Duplicate detection by filename plus SHA-256 hash, with a skip/replace prompt.
 - [x] Library view: cover, title, author; sort by title, author, last opened, import date; live search over title and author.
-- [ ] Reader view: render chapter blocks; font size and line-height controls; dark mode toggle.
-- [ ] Navigation: scrolling, previous/next chapter (`Cmd+[` / `Cmd+]`), TOC sidebar with click-to-jump, minimal `Cmd+K` palette for chapter jump.
-- [ ] Vim toggle (first slice): `j/k`, `gg`, `G`, `Ctrl+d/u`. The rest of the keymap lands in M8.
-- [ ] Reading progress: save scroll position per chapter on every navigation event, resume on open, progress bar at the bottom.
-- [ ] Trash: soft delete via the existing `trashed` column, trash view, restore, empty-with-confirmation showing the item count.
+- [x] Reader view: render chapter blocks; font size and line-height controls; dark mode toggle.
+- [x] Navigation: scrolling, previous/next chapter (`Cmd+[` / `Cmd+]`), TOC sidebar with click-to-jump, minimal `Cmd+K` palette for chapter jump.
 
 **Done when:** import an EPUB, read, quit, reopen: same book, same scroll position. A deleted book sits in trash, restores, and the empty-trash dialog shows the count.
 

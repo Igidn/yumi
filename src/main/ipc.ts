@@ -6,11 +6,12 @@ import { getDb, hasFts5 } from "./database";
 import { appSettings, books } from "./db/schema";
 import {
   bookForRenderer,
+  deleteBook,
   importBook,
 } from "./import";
 import { getCoversDir } from "./paths";
 import { loadReaderBook, saveReaderProgress } from "./reader";
-import { openReaderWindow } from "./windows";
+import { closeReaderWindow, openReaderWindow } from "./windows";
 import { getStore } from "./store";
 import type {
   IPCChannel,
@@ -180,6 +181,12 @@ export function registerIpcHandlers(): void {
   handle("reader:progress", async (_, payload) => {
     await saveReaderProgress(payload);
     broadcastLibraryChangedThrottled();
+  });
+
+  handle("books:delete", async (_, payload) => {
+    closeReaderWindow(payload.id);
+    await deleteBook(payload.id);
+    broadcastEvent("library:changed");
   });
 
   handle("books:reveal", async (_, payload) => {

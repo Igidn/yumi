@@ -7,6 +7,12 @@ const isDev = process.env.NODE_ENV !== "production";
 /** One reader window per book, Apple Books style: re-opening focuses it. */
 const readerWindows = new Map<number, BrowserWindow>();
 
+/** Close the reader window for `bookId` if one is open. */
+export function closeReaderWindow(bookId: number): void {
+  const win = readerWindows.get(bookId);
+  if (win && !win.isDestroyed()) win.close();
+}
+
 interface WindowOptions {
   /** Runs once after the renderer finishes its first load. */
   onDidFinishLoad?: (win: BrowserWindow) => void;
