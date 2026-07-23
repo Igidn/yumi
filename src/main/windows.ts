@@ -60,6 +60,7 @@ function baseWindowOptions(bounds: {
 }): Electron.BrowserWindowConstructorOptions {
   return {
     ...bounds,
+    backgroundColor: "#1a1815",
     minWidth: 800,
     minHeight: 600,
     titleBarStyle: "hidden",
