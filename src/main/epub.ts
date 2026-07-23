@@ -300,6 +300,23 @@ function stripFragment(href: string): string {
   return i >= 0 ? href.slice(0, i) : href;
 }
 
+/** Build a link resolver that maps EPUB hrefs to chapter targets. */
+function makeLinkResolver(
+  docFullPath: string,
+  spineToChapter: Map<string, number>,
+  chapterIndex: number
+): (href: string) => LinkTarget | null {
+  return (href: string): LinkTarget | null => {
+    // Fragment-only link: same chapter.
+    if (href.startsWith("#")) return { chapterIndex, fragment: href.slice(1) };
+    const [path, fragment] = href.split("#");
+    const resolved = resolveHref(docFullPath, path || "");
+    const ch = spineToChapter.get(resolved);
+    if (ch === undefined) return null;
+    return fragment ? { chapterIndex: ch, fragment } : { chapterIndex: ch };
+  };
+}
+
 /** Flatten the EPUB nav (toc + subitems) into a single ordered list. */
 function flattenNav(toc: NavItem[]): { label: string; href: string }[] {
   const out: { label: string; href: string }[] = [];
@@ -536,13 +553,20 @@ export async function parseEpub(
         ? spineByHref.get(nextStartHref)?.index ?? spineItems.length
         : spineItems.length;
 
+      // First pass: register spine→chapter mappings for ALL items in this
+      // nav chapter so cross-spine-item links resolve correctly.
+      for (const item of spineItems) {
+        if (item.index < startItem.index) continue;
+        if (item.index >= nextStartIndex) break;
+        const spineHref = book.resolve(item.href).replace(/^\/+/, "");
+        spineToChapter.set(stripFragment(spineHref), chapters.length);
+      }
+
+      // Second pass: extract blocks.
       const allBlocks: ContentBlock[] = [];
       for (const item of spineItems) {
         if (item.index < startItem.index) continue;
         if (item.index >= nextStartIndex) break;
-        // Record spine→chapter mapping for link resolution.
-        const spineHref = book.resolve(item.href).replace(/^\/+/, "");
-        spineToChapter.set(stripFragment(spineHref), chapters.length);
         let doc: Document;
         try {
           // book.load routes through archive.request (no XHR) since archived=true.
@@ -552,13 +576,11 @@ export async function parseEpub(
           continue;
         }
 
+        const docFullPath = book.resolve(item.href).replace(/^\/+/, "");
+
         // Extract images from this spine doc before DOM-walking.
         if (imageDir) {
           const imgs = doc.getElementsByTagName("img");
-          // book.resolve() gives the full path from ZIP root, e.g.
-          // text/cover.xhtml → /OEBPS/text/cover.xhtml. Strip the
-          // leading / so resolveHref can compute relative paths.
-          const docFullPath = book.resolve(item.href).replace(/^\/+/, "");
           for (let j = 0; j < imgs.length; j++) {
             const src = imgs[j].getAttribute("src");
             if (!src) continue;
@@ -586,18 +608,7 @@ export async function parseEpub(
           }
         }
 
-        const docFullPath = book.resolve(item.href).replace(/^\/+/, "");
-        // Build link resolver for this spine doc so <a> tags get chapter
-        // targets embedded as data-chapter attributes.
-        const resolveLink = (href: string): LinkTarget | null => {
-          // Fragment-only link: same chapter.
-          if (href.startsWith("#")) return { chapterIndex: chapters.length, fragment: href.slice(1) };
-          const [path, fragment] = href.split("#");
-          const resolved = resolveHref(docFullPath, path || "");
-          const ch = spineToChapter.get(resolved);
-          if (ch === undefined) return null;
-          return fragment ? { chapterIndex: ch, fragment } : { chapterIndex: ch };
-        };
+        const resolveLink = makeLinkResolver(docFullPath, spineToChapter, chapters.length);
         allBlocks.push(...extractBlocks(doc, imageMap, docFullPath, resolveLink));
       }
       if (allBlocks.length === 0) continue;
@@ -619,12 +630,12 @@ export async function parseEpub(
       } catch {
         continue;
       }
-        const spineHref = book.resolve(item.href).replace(/^\/+/, "");
-        spineToChapter.set(stripFragment(spineHref), chapters.length);
+      const spineHref = book.resolve(item.href).replace(/^\/+/, "");
+      spineToChapter.set(stripFragment(spineHref), chapters.length);
 
+      const docFullPath = book.resolve(item.href).replace(/^\/+/, "");
       if (imageDir) {
         const imgs = doc.getElementsByTagName("img");
-        const docFullPath = book.resolve(item.href).replace(/^\/+/, "");
         for (let j = 0; j < imgs.length; j++) {
           const src = imgs[j].getAttribute("src");
           if (!src) continue;
@@ -652,15 +663,7 @@ export async function parseEpub(
         }
       }
 
-      const docFullPath = book.resolve(item.href).replace(/^\/+/, "");
-      const resolveLink = (href: string): LinkTarget | null => {
-        if (href.startsWith("#")) return { chapterIndex: chapters.length, fragment: href.slice(1) };
-        const [path, fragment] = href.split("#");
-        const resolved = resolveHref(docFullPath, path || "");
-        const ch = spineToChapter.get(resolved);
-        if (ch === undefined) return null;
-        return fragment ? { chapterIndex: ch, fragment } : { chapterIndex: ch };
-      };
+      const resolveLink = makeLinkResolver(docFullPath, spineToChapter, chapters.length);
       const blocks = extractBlocks(doc, imageMap, docFullPath, resolveLink);
       if (blocks.length === 0) continue;
       chapters.push({

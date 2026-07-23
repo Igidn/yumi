@@ -155,22 +155,25 @@ export function ReaderView({ bookId }: { bookId: number }) {
     [chapterPos, goToChapter]
   );
 
-  // Fragment to scroll to after the target chapter mounts.
-  const [scrollToFragment, setScrollToFragment] = useState<string | null>(null);
+  // Fragment target + nonce for scrolling after chapter mount (nonce forces re-fire).
+  const [fragmentTarget, setFragmentTarget] = useState<{
+    fragment: string | null;
+    nonce: number;
+  }>({ fragment: null, nonce: 0 });
 
   // Hyperlink navigation: push current position, jump to target chapter.
   const handleLinkNavigate = useCallback(
     (targetChapter: number, fragment: string | null) => {
       if (targetChapter === chapterPos) {
-        // Same-chapter link: just scroll to fragment, no history entry.
-        setScrollToFragment(fragment);
+        // Same-chapter link: increment nonce so re-clicks on the same fragment re-fire.
+        setFragmentTarget((prev) => ({ fragment, nonce: prev.nonce + 1 }));
         return;
       }
       const fraction = pageInfo?.fraction ?? 0;
       setLinkHistory((prev) => [...prev, { chapterPos, fraction }]);
       setBackButton({ side: targetChapter < chapterPos ? "right" : "left" });
       goToChapter(targetChapter, 0);
-      setScrollToFragment(fragment);
+      setFragmentTarget((prev) => ({ fragment, nonce: prev.nonce + 1 }));
     },
     [chapterPos, pageInfo?.fraction, goToChapter]
   );
@@ -181,12 +184,16 @@ export function ReaderView({ bookId }: { bookId: number }) {
     if (!entry) return;
     setLinkHistory((prev) => prev.slice(0, -1));
     setBackButton(null);
+    setFragmentTarget({ fragment: null, nonce: 0 });
     goToChapter(entry.chapterPos, entry.fraction);
   }, [linkHistory, goToChapter]);
 
   const handleTocSelect = useCallback(
     (pos: number) => {
       setPanel(null);
+      setLinkHistory([]);
+      setBackButton(null);
+      setFragmentTarget({ fragment: null, nonce: 0 });
       if (pos === chapterPos) {
         setReposition({ fraction: 0, nonce: nonceRef.current++ });
       } else {
@@ -199,6 +206,9 @@ export function ReaderView({ bookId }: { bookId: number }) {
   const handleSearchJump = useCallback(
     (pos: number, blockIndex: number) => {
       setPanel(null);
+      setLinkHistory([]);
+      setBackButton(null);
+      setFragmentTarget({ fragment: null, nonce: 0 });
       setJump({ blockIndex, nonce: nonceRef.current++ });
       if (pos !== chapterPos) goToChapter(pos, 0, true);
     },
@@ -232,9 +242,15 @@ export function ReaderView({ bookId }: { bookId: number }) {
       if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA")) return;
       if ((e.metaKey || e.ctrlKey) && e.key === "[") {
         e.preventDefault();
+        setLinkHistory([]);
+        setBackButton(null);
+        setFragmentTarget({ fragment: null, nonce: 0 });
         goToChapter(chapterPos - 1, 0);
       } else if ((e.metaKey || e.ctrlKey) && e.key === "]") {
         e.preventDefault();
+        setLinkHistory([]);
+        setBackButton(null);
+        setFragmentTarget({ fragment: null, nonce: 0 });
         goToChapter(chapterPos + 1, 0);
       } else if ((e.metaKey || e.ctrlKey) && e.key === "f") {
         e.preventDefault();
@@ -384,7 +400,7 @@ export function ReaderView({ bookId }: { bookId: number }) {
           initialFraction={landingFraction}
           jump={jump}
           reposition={reposition}
-          scrollToFragment={scrollToFragment}
+          fragmentTarget={fragmentTarget}
           onSpreadChange={handleSpreadChange}
           onOverflow={handleOverflow}
           onLinkNavigate={handleLinkNavigate}

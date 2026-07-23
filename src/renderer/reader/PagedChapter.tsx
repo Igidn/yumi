@@ -180,7 +180,7 @@ export function PagedChapter({
   onSpreadChange,
   onOverflow,
   onLinkNavigate,
-  scrollToFragment,
+  fragmentTarget,
 }: {
   chapter: ReaderChapter;
   fontSize: number;
@@ -193,8 +193,8 @@ export function PagedChapter({
   onOverflow: (dir: -1 | 1) => void;
   /** User clicked an internal hyperlink with a resolved chapter target. */
   onLinkNavigate?: (chapterIndex: number, fragment: string | null) => void;
-  /** Fragment ID to scroll to after geometry is measured. */
-  scrollToFragment?: string | null;
+  /** Fragment ID + nonce to scroll to after geometry is measured (nonce forces re-fire). */
+  fragmentTarget?: { fragment: string | null; nonce: number };
 }) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -210,7 +210,7 @@ export function PagedChapter({
   const fractionRef = useRef(initialFraction);
   const lastJumpNonce = useRef(0);
   const lastRepositionNonce = useRef(0);
-  const lastFragment = useRef<string | null>(null);
+  const lastFragmentNonce = useRef(0);
 
   // Chapter switch: drop geometry (hides content) and reseed the position.
   // This is the render-time derived-state reset pattern; the layout effect
@@ -223,7 +223,7 @@ export function PagedChapter({
     fractionRef.current = initialFraction;
     lastJumpNonce.current = 0;
     lastRepositionNonce.current = 0;
-    lastFragment.current = null;
+    lastFragmentNonce.current = 0;
   }
 
   const measure = useCallback(() => {
@@ -347,13 +347,13 @@ export function PagedChapter({
 
   // Fragment-based scroll: find the element with the matching id and scroll to its spread.
   useEffect(() => {
-    if (!geom || !scrollToFragment) return;
-    if (scrollToFragment === lastFragment.current) return;
-    lastFragment.current = scrollToFragment;
+    if (!geom || !fragmentTarget?.fragment) return;
+    if (fragmentTarget.nonce === lastFragmentNonce.current) return;
+    lastFragmentNonce.current = fragmentTarget.nonce;
     const content = contentRef.current;
     if (!content) return;
     const el = content.querySelector<HTMLElement>(
-      `[id="${CSS.escape(scrollToFragment)}"]`
+      `[id="${CSS.escape(fragmentTarget.fragment)}"]`
     );
     if (!el) return;
     // Use bounding rect relative to the content container — offsetLeft is
@@ -366,7 +366,7 @@ export function PagedChapter({
     el.classList.add("reader-flash");
     const timer = setTimeout(() => el.classList.remove("reader-flash"), 10000);
     return () => clearTimeout(timer);
-  }, [geom, scrollToFragment]);
+  }, [geom, fragmentTarget]);
 
   const goNext = useCallback(() => {
     if (!geom) return;
