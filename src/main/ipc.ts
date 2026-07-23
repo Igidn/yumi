@@ -1,6 +1,6 @@
 import fs from "fs";
 import path from "path";
-import { BrowserWindow, dialog, ipcMain } from "electron";
+import { BrowserWindow, dialog, ipcMain, shell } from "electron";
 import { eq } from "drizzle-orm";
 import { getDb, hasFts5 } from "./database";
 import { appSettings, books } from "./db/schema";
@@ -94,10 +94,14 @@ export function registerIpcHandlers(): void {
     const patch: {
       title?: string;
       author?: string;
+      progress?: number;
       coverPath?: string;
     } = {};
     if (payload.title !== undefined) patch.title = payload.title.trim() || "Untitled";
     if (payload.author !== undefined) patch.author = payload.author;
+    if (payload.progress !== undefined) {
+      patch.progress = Math.min(1, Math.max(0, payload.progress));
+    }
 
     if (payload.coverSourcePath) {
       const src = path.resolve(payload.coverSourcePath);
@@ -124,6 +128,18 @@ export function registerIpcHandlers(): void {
       .returning();
     broadcastEvent("library:changed");
     return bookForRenderer(rows[0]);
+  });
+
+  handle("books:reveal", async (_, payload) => {
+    const db = await getDb();
+    const row = (
+      await db.select().from(books).where(eq(books.id, payload.id)).limit(1)
+    )[0];
+    if (!row) throw new Error(`Book not found: ${payload.id}`);
+    if (!row.sourcePath || !fs.existsSync(row.sourcePath)) {
+      throw new Error(`Book file missing: ${row.sourcePath}`);
+    }
+    shell.showItemInFolder(row.sourcePath);
   });
 
   handle("import:book", async (_, payload) => {

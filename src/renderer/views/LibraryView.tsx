@@ -24,20 +24,28 @@ function CoverPlaceholder({ title, author }: { title: string; author: string }) 
   );
 }
 
+type MenuState = { book: Book; x: number; y: number };
+
 function BookCard({
   book,
   onOpen,
-  onDetails,
+  onMenu,
 }: {
   book: Book;
   onOpen: () => void;
-  onDetails: () => void;
+  onMenu: (pos: { x: number; y: number }) => void;
 }) {
   const [broken, setBroken] = useState(false);
   const showCover = !!book.coverPath && !broken;
 
   return (
-    <div className="w-[170px]">
+    <div
+      className="w-[170px]"
+      onContextMenu={(e) => {
+        e.preventDefault();
+        onMenu({ x: e.clientX, y: e.clientY });
+      }}
+    >
       <button
         onClick={onOpen}
         className="block h-[261px] w-[170px] overflow-hidden rounded-[2px] bg-shell transition-opacity hover:opacity-85 focus-visible:outline-2 focus-visible:outline-muted"
@@ -59,7 +67,8 @@ function BookCard({
         <button
           onClick={(e) => {
             e.stopPropagation();
-            onDetails();
+            const r = e.currentTarget.getBoundingClientRect();
+            onMenu({ x: r.right, y: r.bottom + 4 });
           }}
           className="text-muted transition-colors hover:text-ink"
           aria-label={`More options for ${book.title}`}
@@ -71,12 +80,98 @@ function BookCard({
   );
 }
 
+function BookMenu({
+  menu,
+  onClose,
+  onDetails,
+  onFinished,
+}: {
+  menu: MenuState;
+  onClose: () => void;
+  onDetails: () => void;
+  onFinished: () => void;
+}) {
+  useEffect(() => {
+    const close = () => onClose();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    // next tick so the opening click doesn't instantly dismiss
+    const t = setTimeout(() => {
+      window.addEventListener("pointerdown", close);
+      window.addEventListener("keydown", onKey);
+      window.addEventListener("scroll", close, true);
+    }, 0);
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener("pointerdown", close);
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("scroll", close, true);
+    };
+  }, [onClose]);
+
+  const finished = menu.book.progress >= 1;
+  const item =
+    "flex w-full px-3 py-1.5 text-left text-[12px] text-ink transition-colors hover:bg-field disabled:cursor-not-allowed disabled:text-muted disabled:hover:bg-transparent";
+
+  return (
+    <div
+      role="menu"
+      className="fixed z-50 min-w-[160px] overflow-hidden rounded-[8px] border border-edge bg-shell py-1 shadow-shell"
+      style={{ left: menu.x, top: menu.y }}
+      onPointerDown={(e) => e.stopPropagation()}
+    >
+      <button
+        role="menuitem"
+        disabled={finished}
+        className={item}
+        onClick={() => {
+          onFinished();
+          onClose();
+        }}
+      >
+        Mark as finished
+      </button>
+      <button
+        role="menuitem"
+        className={item}
+        onClick={() => {
+          onDetails();
+          onClose();
+        }}
+      >
+        Details
+      </button>
+      <button
+        role="menuitem"
+        className={item}
+        onClick={() => {
+          void window.yumi.invoke("books:reveal", { id: menu.book.id });
+          onClose();
+        }}
+      >
+        Reveal in folder
+      </button>
+      {/* ponytail: delete is UI-only until trash/soft-delete lands */}
+      <button
+        role="menuitem"
+        disabled
+        title="Coming soon"
+        className={item}
+      >
+        Delete
+      </button>
+    </div>
+  );
+}
+
 export function LibraryView({ onOpenBook }: { onOpenBook: () => void }) {
   const [books, setBooks] = useState<Book[]>([]);
   const [query, setQuery] = useState("");
   const [titleAsc, setTitleAsc] = useState(true);
   const [importMessage, setImportMessage] = useState<string | null>(null);
   const [detailBookId, setDetailBookId] = useState<number | null>(null);
+  const [menu, setMenu] = useState<MenuState | null>(null);
   const { importing, importPaths, pendingDuplicate, resolveDuplicate } =
     useImport();
 
@@ -201,6 +296,23 @@ export function LibraryView({ onOpenBook }: { onOpenBook: () => void }) {
         />
       )}
 
+      {menu && (
+        <BookMenu
+          menu={menu}
+          onClose={() => setMenu(null)}
+          onDetails={() => setDetailBookId(menu.book.id)}
+          onFinished={() => {
+            void window.yumi
+              .invoke("books:update", { id: menu.book.id, progress: 1 })
+              .then((updated) =>
+                setBooks((prev) =>
+                  prev.map((b) => (b.id === updated.id ? updated : b)),
+                ),
+              );
+          }}
+        />
+      )}
+
       {/* Book grid */}
       {visibleBooks.length === 0 ? (
         <p className="mt-[40px] text-center text-[13px] text-muted">
@@ -213,7 +325,7 @@ export function LibraryView({ onOpenBook }: { onOpenBook: () => void }) {
               key={book.id}
               book={book}
               onOpen={onOpenBook}
-              onDetails={() => setDetailBookId(book.id)}
+              onMenu={(pos) => setMenu({ book, ...pos })}
             />
           ))}
         </div>

@@ -30,6 +30,7 @@ export type IPCChannel =
   | "books:list"
   | "books:insert"
   | "books:update"
+  | "books:reveal"
   | "import:book"
   | "dialog:openFile"
   | "dialog:openImage"
@@ -50,9 +51,12 @@ export interface IPCPayloads {
     id: number;
     title?: string;
     author?: string;
+    // 0–1 reading progress; 1 = finished.
+    progress?: number;
     // Absolute path to a new cover image; main copies it into covers/.
     coverSourcePath?: string;
   };
+  "books:reveal": { id: number };
   "import:book": {
     sourcePath: string;
     // Resolution for a detected duplicate. Omit ("prompt") to detect and
@@ -71,6 +75,7 @@ export interface IPCResponses {
   "books:list": Book[];
   "books:insert": Book;
   "books:update": Book;
+  "books:reveal": void;
   "import:book": ImportOutcome;
   "dialog:openFile": string[];
   "dialog:openImage": string | null;
