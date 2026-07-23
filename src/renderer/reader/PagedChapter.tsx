@@ -113,6 +113,9 @@ export function PagedChapter({
   const contentRef = useRef<HTMLDivElement>(null);
   const [geom, setGeom] = useState<Geometry | null>(null);
   const [spread, setSpread] = useState(0);
+  // Off until the user pages — avoids animating the post-measure landing spread
+  // (e.g. chapter overflow back onto the previous chapter's last page).
+  const [animate, setAnimate] = useState(false);
 
   // Position bookkeeping across geometry changes; reseeded on chapter
   // switch, kept up to date as the user pages.
@@ -240,12 +243,14 @@ export function PagedChapter({
 
   const goNext = useCallback(() => {
     if (!geom) return;
+    setAnimate(true);
     if (spread < geom.spreads - 1) setSpread(spread + 1);
     else onOverflow(1);
   }, [geom, spread, onOverflow]);
 
   const goPrev = useCallback(() => {
     if (!geom) return;
+    setAnimate(true);
     if (spread > 0) setSpread(spread - 1);
     else onOverflow(-1);
   }, [geom, spread, onOverflow]);
@@ -294,7 +299,7 @@ export function PagedChapter({
           <div
             ref={contentRef}
             lang="en"
-            className="reader-content text-reader transition-transform duration-200 ease-out"
+            className={`reader-content text-reader${animate ? " transition-transform duration-200 ease-out" : ""}`}
             style={{
               width: geom ? geom.contentWidth : "100%",
               height: geom ? geom.contentHeight : "100%",

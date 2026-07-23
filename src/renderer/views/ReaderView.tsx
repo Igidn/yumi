@@ -300,6 +300,7 @@ export function ReaderView({ bookId }: { bookId: number }) {
       {/* Reading surface */}
       {chapter ? (
         <PagedChapter
+          key={chapter.id}
           chapter={chapter}
           fontSize={settings.fontSize}
           lineHeight={settings.lineHeight}
