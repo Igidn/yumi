@@ -97,21 +97,6 @@ app.whenReady().then(async () => {
   registerAssetProtocol();
   registerIpcHandlers();
   await openMainWindow();
-
-  // TEMP smoke-test hook (removed before commit): YUMI_OPEN_READER=<bookId>
-  // opens that book's reader window at boot.
-  if (process.env.YUMI_OPEN_READER) {
-    const { getDb } = await import("./database");
-    const { books } = await import("./db/schema");
-    const { eq } = await import("drizzle-orm");
-    const { openReaderWindow } = await import("./windows");
-    const db = await getDb();
-    const id = Number(process.env.YUMI_OPEN_READER);
-    const row = (
-      await db.select().from(books).where(eq(books.id, id)).limit(1)
-    )[0];
-    if (row) await openReaderWindow(row.id, row.title);
-  }
 });
 
 app.on("window-all-closed", () => {

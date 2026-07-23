@@ -2,7 +2,7 @@ import fs from "fs";
 import path from "path";
 import { createHash } from "crypto";
 import { eq } from "drizzle-orm";
-import { getUserDataPath } from "./paths";
+import { getBooksDir, getCoversDir, getUserDataPath } from "./paths";
 import { getDb } from "./database";
 import { books } from "./db/schema";
 import { readEpubMeta } from "./epub";
@@ -12,20 +12,6 @@ const SUPPORTED_EXTENSIONS: Record<string, BookFormat> = {
   ".epub": "epub",
   ".pdf": "pdf",
 };
-
-/** Return `<userData>/books`, creating the directory if it does not exist. */
-export function getBooksDir(): string {
-  const dir = path.join(getUserDataPath(), "books");
-  fs.mkdirSync(dir, { recursive: true });
-  return dir;
-}
-
-/** Return `<userData>/covers`, creating the directory if it does not exist. */
-export function getCoversDir(): string {
-  const dir = path.join(getUserDataPath(), "covers");
-  fs.mkdirSync(dir, { recursive: true });
-  return dir;
-}
 
 /**
  * Rewrite a stored absolute cover path into a `yumi://asset/...` URL the

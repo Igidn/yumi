@@ -101,7 +101,7 @@ export interface IPCPayloads {
   "books:reveal": { id: number };
   // Library → main: open (or focus) the reader window for a book.
   "reader:open": { id: number };
-  // Reader window → main: book + chapters for rendering.
+  // Reader window → main: request book + chapters for rendering.
   "reader:load": { id: number };
   "reader:progress": {
     bookId: number;

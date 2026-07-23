@@ -43,7 +43,6 @@ function trackBounds(win: BrowserWindow, key: "windowBounds" | "readerWindowBoun
     store.set(key, win.getNormalBounds());
   };
   win.on("resize", save);
-  win.on("move", save);
   win.on("moved", save);
 }
 

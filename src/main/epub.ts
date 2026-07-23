@@ -14,7 +14,7 @@ if (typeof (globalThis as any).window === "undefined") {
 
 import { Book, NavItem } from "epubjs";
 import type { ContentBlock } from "../shared/types";
-import { getCoversDir } from "./import";
+import { getCoversDir } from "./paths";
 
 export type { ContentBlock };
 
@@ -47,6 +47,10 @@ export interface EpubMeta {
 }
 
 const XHTML_NS = "http://www.w3.org/1999/xhtml";
+
+/** Safety limits for image extraction so a malicious or manga-sized EPUB doesn't exhaust disk. */
+const MAX_EXTRACTED_IMAGES = 500;
+const MAX_IMAGE_SIZE_BYTES = 50 * 1024 * 1024; // 50 MB per image
 
 function textOf(node: Element): string {
   return (node.textContent || "").replace(/\s+/g, " ").trim();
@@ -283,11 +287,11 @@ async function loadNavManually(
     if (!tryPath) continue;
     try {
       const doc = (await book.load(tryPath)) as unknown as Document;
-      const items =
-        typeof nav?.parseNcx === "function"
+      const isNav = tryPath === packaging.navPath && tryPath !== packaging.ncxPath;
+      const items = isNav && typeof nav?.parseNav === "function"
+        ? nav.parseNav(doc)
+        : typeof nav?.parseNcx === "function"
           ? nav.parseNcx(doc)
-          : typeof nav?.parseNav === "function"
-          ? nav.parseNav(doc)
           : [];
       if (items?.length) return flattenNav(items as NavItem[]);
     } catch {
@@ -295,6 +299,8 @@ async function loadNavManually(
       // branch below still produces a usable (over-counted) chapter list.
     }
   }
+  console.warn("[epub] nav parse failed for both NCX and nav paths; falling back to spine walk");
+
   return [];
 }
 
@@ -403,6 +409,7 @@ export async function parseEpub(
   bookId?: number
 ): Promise<ParsedEpub> {
   const book = await openEpub(filePath);
+  try {
   const { title, author } = metadataOf(book);
 
   // The EPUB nav is the source of truth for chapter boundaries — many books
@@ -500,14 +507,15 @@ export async function parseEpub(
           // text/cover.xhtml → /OEBPS/text/cover.xhtml. Strip the
           // leading / so resolveHref can compute relative paths.
           const docFullPath = book.resolve(item.href).replace(/^\/+/, "");
-          for (let i = 0; i < imgs.length; i++) {
-            const src = imgs[i].getAttribute("src");
+          for (let j = 0; j < imgs.length; j++) {
+            const src = imgs[j].getAttribute("src");
             if (!src) continue;
             const resolved = resolveHref(docFullPath, src);
             if (imageMap.has(resolved)) continue;
+            if (imageMap.size >= MAX_EXTRACTED_IMAGES) break;
             try {
               const blob = await getImageBlob(resolved);
-              if (blob && blob.size > 0) {
+              if (blob && blob.size > 0 && blob.size <= MAX_IMAGE_SIZE_BYTES) {
                 const ext = pathExt(resolved) || "jpg";
                 const filename = `${imageMap.size}.${ext}`;
                 const dest = path.join(imageDir, filename);
@@ -557,9 +565,10 @@ export async function parseEpub(
           if (!src) continue;
           const resolved = resolveHref(docFullPath, src);
           if (imageMap.has(resolved)) continue;
+          if (imageMap.size >= MAX_EXTRACTED_IMAGES) break;
           try {
             const blob = await getImageBlob(resolved);
-            if (blob && blob.size > 0) {
+            if (blob && blob.size > 0 && blob.size <= MAX_IMAGE_SIZE_BYTES) {
               const ext = pathExt(resolved) || "jpg";
               const filename = `${imageMap.size}.${ext}`;
               const dest = path.join(imageDir, filename);
@@ -589,8 +598,10 @@ export async function parseEpub(
     }
   }
 
-  book.destroy();
   return { title, author, chapters };
+  } finally {
+    book.destroy();
+  }
 }
 
 // Self-check: `tsx src/main/epub.ts <file.epub>` prints a one-line summary.

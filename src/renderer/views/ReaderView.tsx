@@ -118,7 +118,7 @@ export function ReaderView({ bookId }: { bookId: number }) {
   // ---- navigation --------------------------------------------------------
 
   const goToChapter = useCallback(
-    (pos: number, fraction: number) => {
+    (pos: number, fraction: number, keepJump?: boolean) => {
       const data = payloadRef.current;
       if (!data || pos < 0 || pos >= data.chapters.length) return;
       // Persist the old location before moving.
@@ -127,7 +127,7 @@ export function ReaderView({ bookId }: { bookId: number }) {
         saveTimer.current = null;
       }
       flushProgress();
-      setJump(null);
+      if (!keepJump) setJump(null);
       setReposition(null);
       setPageInfo(null);
       setLandingFraction(fraction);
@@ -161,7 +161,7 @@ export function ReaderView({ bookId }: { bookId: number }) {
     (pos: number, blockIndex: number) => {
       setPanel(null);
       setJump({ blockIndex, nonce: nonceRef.current++ });
-      if (pos !== chapterPos) goToChapter(pos, 0);
+      if (pos !== chapterPos) goToChapter(pos, 0, true);
     },
     [chapterPos, goToChapter]
   );

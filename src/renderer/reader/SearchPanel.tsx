@@ -10,6 +10,8 @@ export interface SearchHit {
 }
 
 const MAX_RESULTS = 100;
+const FOCUSABLE_SELECTOR =
+  'button:not([tabindex="-1"]), [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
 
 function searchChapters(chapters: ReaderChapter[], query: string): SearchHit[] {
   const q = query.trim().toLowerCase();
@@ -53,18 +55,66 @@ export function SearchPanel({
   onClose: () => void;
 }) {
   const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+  const panelRef = useRef<HTMLElement>(null);
+  const timerRef = useRef<number | null>(null);
 
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
 
-  const hits = useMemo(() => searchChapters(chapters, query), [chapters, query]);
+  // Focus-trap Tab cycling within the panel.
+  useEffect(() => {
+    const panel = panelRef.current;
+    if (!panel) return;
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Tab") return;
+      const items = panel.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR);
+      if (items.length === 0) return;
+
+      const first = items[0];
+      const last = items[items.length - 1];
+      const focused = document.activeElement;
+
+      if (e.shiftKey) {
+        if (focused === first) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else {
+        if (focused === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  useEffect(() => {
+    if (timerRef.current) window.clearTimeout(timerRef.current);
+    timerRef.current = window.setTimeout(() => {
+      timerRef.current = null;
+      setDebouncedQuery(query);
+    }, 180);
+    return () => {
+      if (timerRef.current) window.clearTimeout(timerRef.current);
+    };
+  }, [query]);
+
+  const hits = useMemo(
+    () => searchChapters(chapters, debouncedQuery),
+    [chapters, debouncedQuery]
+  );
 
   return (
     <>
       <div className="fixed inset-0 z-20" onClick={onClose} aria-hidden />
       <aside
+        ref={panelRef}
         className="fixed bottom-3 right-3 top-[60px] z-30 flex w-[320px] flex-col overflow-hidden rounded-[12px] border border-reader-edge bg-reader-chrome/95 shadow-shell backdrop-blur-md"
         role="dialog"
         aria-label="Search in book"
@@ -86,7 +136,7 @@ export function SearchPanel({
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto p-2">
-          {query.trim().length >= 2 && hits.length === 0 && (
+          {debouncedQuery.trim().length >= 2 && hits.length === 0 && (
             <p className="px-2 py-6 text-center text-[12px] text-reader-muted">
               No results
             </p>

@@ -52,14 +52,12 @@ async function doParseEpub(
  * table on first open. Chapters are cached in SQLite from then on, so the
  * zip walk happens exactly once per book (M1 stores blocks in rawText).
  *
- * Self-heal: if a cached book has the same title appearing 2+ times, the
- * chapter list is suspect — re-parse once and re-attach each chapter's
- * scrollPosition by title (taking the max across the duplicates) so the
- * reader's in-chapter position survives the migration. Per-chapter ids
- * change — annotations/notes/drawings on those old chapter rows are
+ * Self-heal: if a cached book has consecutive chapters with identical
+ * titles, the chapter list is suspect — re-parse once and re-attach each
+ * chapter's scrollPosition by title (taking the max across the duplicates)
+ * so the reader's in-chapter position survives the migration. Per-chapter
+ * ids change — annotations/notes/drawings on those old chapter rows are
  * dropped by the cascade; their data was already on the wrong chapter.
- * Threshold is 2, not 3: a buggy parse can produce exact 2x duplication
- * (one row per logical chapter, twice) and a higher floor would miss it.
  */
 async function ensureChapters(
   bookId: number,
@@ -74,9 +72,9 @@ async function ensureChapters(
     .orderBy(asc(chapters.index));
 
   if (existing.length > 0) {
-    const titleCounts = new Map<string, number>();
-    for (const c of existing) titleCounts.set(c.title, (titleCounts.get(c.title) ?? 0) + 1);
-    const looksBuggy = [...titleCounts.values()].some((n) => n >= 2);
+    const looksBuggy = existing.some(
+      (c, i) => i > 0 && c.title === existing[i - 1].title
+    );
     if (!looksBuggy || format !== "epub") return existing;
 
     // Self-heal: delete duplicates and re-parse once.
@@ -86,8 +84,13 @@ async function ensureChapters(
         scrollByTitle.set(c.title, c.scrollPosition);
       }
     }
-    await db.delete(chapters).where(eq(chapters.bookId, bookId));
-    return doParseEpub(bookId, sourcePath, scrollByTitle);
+    try {
+      await db.delete(chapters).where(eq(chapters.bookId, bookId));
+      return doParseEpub(bookId, sourcePath, scrollByTitle);
+    } catch (err) {
+      console.error("[reader] self-heal parse failed:", err);
+      return existing;
+    }
   }
 
   if (format !== "epub") return existing;
@@ -169,12 +172,19 @@ export async function saveReaderProgress(payload: {
   const db = await getDb();
   const chapterPosition = Math.min(1, Math.max(0, payload.chapterPosition));
   const bookProgress = Math.min(1, Math.max(0, payload.bookProgress));
-  await db
-    .update(chapters)
-    .set({ scrollPosition: chapterPosition })
-    .where(eq(chapters.id, payload.chapterId));
-  await db
-    .update(books)
-    .set({ progress: bookProgress })
-    .where(eq(books.id, payload.bookId));
+  try {
+    await db
+      .update(chapters)
+      .set({ scrollPosition: chapterPosition })
+      .where(eq(chapters.id, payload.chapterId));
+    await db
+      .update(books)
+      .set({ progress: bookProgress })
+      .where(eq(books.id, payload.bookId));
+  } catch (err) {
+    // ponytail: sql.js has no Drizzle transaction wrapper; a crash between
+    // the two writes leaves progress partially saved, but the re-save on
+    // the next page turn will overwrite the stale value.
+    console.error("[reader] progress save failed:", err);
+  }
 }

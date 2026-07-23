@@ -6,9 +6,9 @@ import { getDb, hasFts5 } from "./database";
 import { appSettings, books } from "./db/schema";
 import {
   bookForRenderer,
-  getCoversDir,
   importBook,
 } from "./import";
+import { getCoversDir } from "./paths";
 import { loadReaderBook, saveReaderProgress } from "./reader";
 import { openReaderWindow } from "./windows";
 import { getStore } from "./store";

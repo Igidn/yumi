@@ -339,16 +339,22 @@ export function PagedChapter({
   const goNext = useCallback(() => {
     if (!geom) return;
     setAnimate(true);
-    if (spread < geom.spreads - 1) setSpread(spread + 1);
-    else onOverflow(1);
-  }, [geom, spread, onOverflow]);
+    setSpread((s) => {
+      if (s < geom.spreads - 1) return s + 1;
+      onOverflow(1);
+      return s;
+    });
+  }, [geom, onOverflow]);
 
   const goPrev = useCallback(() => {
     if (!geom) return;
     setAnimate(true);
-    if (spread > 0) setSpread(spread - 1);
-    else onOverflow(-1);
-  }, [geom, spread, onOverflow]);
+    setSpread((s) => {
+      if (s > 0) return s - 1;
+      onOverflow(-1);
+      return s;
+    });
+  }, [geom, onOverflow]);
 
   // Page-turn keys live here (they need the spread state); ReaderView keeps
   // chapter-level and panel shortcuts.
@@ -377,7 +383,7 @@ export function PagedChapter({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  });
+  }, [goNext, goPrev]);
 
   return (
     <div ref={viewportRef} className="relative min-w-0 flex-1 overflow-hidden">
