@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowDownNarrowWide, ArrowUpNarrowWide, Check } from "lucide-react";
 import { SORT_OPTIONS, type SortKey } from "../library/sort";
+import { fitToViewport } from "../shared/fit-to-viewport";
 
 export function SortMenu({
   sortKey,
@@ -23,7 +24,7 @@ export function SortMenu({
       const anchor = anchorRef.current;
       if (!anchor) return;
       const r = anchor.getBoundingClientRect();
-      setPos({ left: r.right, top: r.bottom + 4 });
+      setPos(fitToViewport(r.right, r.bottom + 4, 180, 240));
     };
     place();
     window.addEventListener("resize", place);

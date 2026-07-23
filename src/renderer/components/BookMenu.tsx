@@ -1,5 +1,6 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import type { Book } from "../../shared/types";
+import { fitToViewport } from "../shared/fit-to-viewport";
 
 export type MenuState = { book: Book; x: number; y: number };
 
@@ -21,7 +22,7 @@ export function BookMenu({
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
-    // next tick so the opening click doesn't instantly dismiss
+    // Next tick so the opening click doesn't instantly dismiss
     const t = setTimeout(() => {
       window.addEventListener("pointerdown", close);
       window.addEventListener("keydown", onKey);
@@ -35,6 +36,12 @@ export function BookMenu({
     };
   }, [onClose]);
 
+  const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
+
+  useEffect(() => {
+    setPos(fitToViewport(menu.x, menu.y, 160, 170));
+  }, [menu.x, menu.y]);
+
   const finished = menu.book.progress >= 1;
   const item =
     "flex w-full px-3 py-1.5 text-left text-[12px] text-ink transition-colors hover:bg-field disabled:cursor-not-allowed disabled:text-muted disabled:hover:bg-transparent";
@@ -43,7 +50,7 @@ export function BookMenu({
     <div
       role="menu"
       className="fixed z-50 min-w-[160px] overflow-hidden rounded-[8px] border border-edge bg-shell py-1 shadow-shell"
-      style={{ left: menu.x, top: menu.y }}
+      style={pos ?? { left: -9999, top: -9999 }}
       onPointerDown={(e) => e.stopPropagation()}
     >
       <button
