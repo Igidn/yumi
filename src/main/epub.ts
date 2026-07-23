@@ -177,38 +177,57 @@ function stripFragment(href: string): string {
   return i >= 0 ? href.slice(0, i) : href;
 }
 
-/** Flatten the EPUB nav (toc + subitems) into an href→label map. */
-function buildNavIndex(toc: NavItem[]): Map<string, string> {
-  const map = new Map<string, string>();
+/** Flatten the EPUB nav (toc + subitems) into a single ordered list. */
+function flattenNav(toc: NavItem[]): { label: string; href: string }[] {
+  const out: { label: string; href: string }[] = [];
   const visit = (items: NavItem[]) => {
     for (const item of items) {
       if (item.href && item.label) {
         // EPUB nav labels often carry stray whitespace from the NCX/XHTML
         // source; collapse it so the TOC sidebar renders clean titles.
         const label = item.label.replace(/\s+/g, " ").trim();
-        if (!label) continue;
-        // Key by both the raw href and its fragment-stripped form, so a
-        // spine href without a fragment still matches a nav href with one.
-        map.set(item.href, label);
-        const base = stripFragment(item.href);
-        if (!map.has(base)) map.set(base, label);
+        if (label) out.push({ label, href: item.href });
       }
       if (item.subitems) visit(item.subitems);
     }
   };
   visit(toc);
-  return map;
+  return out;
 }
 
-function chapterTitle(
-  doc: Document,
-  navLabel: string | undefined,
-  fallback: string
-): string {
-  // EPUB nav (toc.ncx / nav.xhtml) gives clean chapter titles; prefer it
-  // over the file's <h1>/<title>, which in many books is boilerplate
+/**
+ * Fallback nav loader for when epubjs's auto-loaded `book.navigation` ends
+ * up empty (its `parse()` misidentifies the root of some XHTML nav docs).
+ * Tries toc.ncx first (almost always present), then nav.xhtml.
+ */
+async function loadNavManually(
+  book: Book,
+  nav: any
+): Promise<{ label: string; href: string }[]> {
+  const packaging: any = (book as any).packaging;
+  for (const tryPath of [packaging?.ncxPath, packaging?.navPath]) {
+    if (!tryPath) continue;
+    try {
+      const doc = (await book.load(tryPath)) as unknown as Document;
+      const items =
+        typeof nav?.parseNcx === "function"
+          ? nav.parseNcx(doc)
+          : typeof nav?.parseNav === "function"
+          ? nav.parseNav(doc)
+          : [];
+      if (items?.length) return flattenNav(items as NavItem[]);
+    } catch {
+      // ponytail: try the next path; failure here is not fatal — the nav-less
+      // branch below still produces a usable (over-counted) chapter list.
+    }
+  }
+  return [];
+}
+
+function chapterTitle(doc: Document, fallback: string): string {
+  // Nav-less fallback: read the title from the document itself. EPUB nav is
+  // the preferred source — many books stamp boilerplate in <h1>/<title>
   // (e.g. a Project Gutenberg header repeated on every section).
-  if (navLabel) return navLabel;
   const h1 =
     doc.getElementsByTagName("h1")[0] || doc.getElementsByTagName("h2")[0];
   if (h1) {
@@ -304,50 +323,99 @@ export async function parseEpub(filePath: string): Promise<ParsedEpub> {
   const book = await openEpub(filePath);
   const { title, author } = metadataOf(book);
 
-  // Build a href→label index from the EPUB navigation so chapter titles come
-  // from the TOC the M1 sidebar will render, not the file's own <title>.
+  // The EPUB nav is the source of truth for chapter boundaries — many books
+  // split a single chapter across several XHTML files (text + image + text)
+  // to keep file sizes small, so walking the spine (file-level) inflates the
+  // chapter count and produces duplicate entries. The nav (toc.ncx /
+  // nav.xhtml) lists each logical chapter once.
+  //
+  // epubjs's `book.loaded.navigation` is unreliable: it returns an empty toc
+  // for EPUBs whose nav.xhtml isn't recognised as HTML, which silently
+  // re-introduces the duplication bug. Parse the toc.ncx (or nav.xhtml as a
+  // fallback) ourselves so the flat nav is correct on every book.
   const nav = (await book.loaded.navigation) as any;
-  const navIndex = nav?.toc
-    ? buildNavIndex(nav.toc as NavItem[])
-    : new Map<string, string>();
+  let flatNav: { label: string; href: string }[] = nav?.toc?.length
+    ? flattenNav(nav.toc as NavItem[])
+    : await loadNavManually(book, nav);
 
-  // Collect spine sections in order, skipping non-linear (cover, etc.).
-  const spineItems: SpineItemLike[] = [];
+  // Collect linear spine sections in order, indexed by fragment-stripped
+  // href so a nav entry like `section-0009.html#auto_bookmark_toc_9` finds
+  // the matching file.
+  interface SpineRef {
+    index: number;
+    href: string;
+  }
+  const spineItems: SpineRef[] = [];
+  const spineByHref = new Map<string, SpineRef>();
+  let spineIndex = 0;
   (book.spine as any).each((section: any) => {
-    if (section.linear !== false) spineItems.push(section);
+    if (section.linear === false) return;
+    const item: SpineRef = { index: spineIndex++, href: section.href };
+    spineItems.push(item);
+    const base = stripFragment(section.href);
+    if (!spineByHref.has(base)) spineByHref.set(base, item);
   });
 
   const chapters: ParsedChapter[] = [];
-  for (let i = 0; i < spineItems.length; i++) {
-    const section = spineItems[i];
-    let doc: Document;
-    try {
-      // book.load routes through archive.request (no XHR) since archived=true.
-      doc = (await book.load(section.href)) as unknown as Document;
-    } catch {
-      // ponytail: skip unreadable spine items rather than aborting the book.
-      continue;
+  if (flatNav.length > 0) {
+    for (let i = 0; i < flatNav.length; i++) {
+      const entry = flatNav[i];
+      const startHref = stripFragment(entry.href);
+      const startItem = spineByHref.get(startHref);
+      if (!startItem) continue; // nav points outside the spine — skip
+      // A chapter spans every spine section from its start up to (but not
+      // including) the next nav entry's start. The last chapter runs to
+      // the end of the spine.
+      const nextStartHref =
+        i + 1 < flatNav.length ? stripFragment(flatNav[i + 1].href) : null;
+      const nextStartIndex = nextStartHref
+        ? spineByHref.get(nextStartHref)?.index ?? spineItems.length
+        : spineItems.length;
+      const allBlocks: ContentBlock[] = [];
+      for (const item of spineItems) {
+        if (item.index < startItem.index) continue;
+        if (item.index >= nextStartIndex) break;
+        let doc: Document;
+        try {
+          // book.load routes through archive.request (no XHR) since archived=true.
+          doc = (await book.load(item.href)) as unknown as Document;
+        } catch {
+          // ponytail: skip unreadable spine items rather than aborting the book.
+          continue;
+        }
+        allBlocks.push(...extractBlocks(doc));
+      }
+      if (allBlocks.length === 0) continue;
+      chapters.push({
+        index: chapters.length,
+        title: entry.label,
+        rawText: JSON.stringify(allBlocks),
+      });
     }
-    const sectionHref = stripFragment(section.href);
-    const navLabel = navIndex.get(section.href) || navIndex.get(sectionHref);
-    const title2 = chapterTitle(doc, navLabel, `Chapter ${i + 1}`);
-    const blocks = extractBlocks(doc);
-    if (blocks.length === 0) continue; // empty section (cover pages, etc.)
-    chapters.push({
-      index: i,
-      title: title2,
-      rawText: JSON.stringify(blocks),
-    });
+  } else {
+    // ponytail: nav-less fallback (rare — books without toc.ncx/nav.xhtml);
+    // file-level spine iteration over-counts chapters the same way as the
+    // buggy version, but the renderer still renders *something*.
+    for (let i = 0; i < spineItems.length; i++) {
+      const item = spineItems[i];
+      let doc: Document;
+      try {
+        doc = (await book.load(item.href)) as unknown as Document;
+      } catch {
+        continue;
+      }
+      const blocks = extractBlocks(doc);
+      if (blocks.length === 0) continue;
+      chapters.push({
+        index: chapters.length,
+        title: chapterTitle(doc, `Chapter ${chapters.length + 1}`),
+        rawText: JSON.stringify(blocks),
+      });
+    }
   }
 
   book.destroy();
   return { title, author, chapters };
-}
-
-interface SpineItemLike {
-  href: string;
-  index: number;
-  linear: boolean | string;
 }
 
 // Self-check: `tsx src/main/epub.ts <file.epub>` prints a one-line summary.

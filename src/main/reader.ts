@@ -24,6 +24,15 @@ function blocksFromRaw(rawText: string): ContentBlock[] {
  * Return the chapter rows for a book, parsing the EPUB into the chapters
  * table on first open. Chapters are cached in SQLite from then on, so the
  * zip walk happens exactly once per book (M1 stores blocks in rawText).
+ *
+ * Self-heal: if a cached book has the same title appearing 2+ times, the
+ * chapter list is suspect — re-parse once and re-attach each chapter's
+ * scrollPosition by title (taking the max across the duplicates) so the
+ * reader's in-chapter position survives the migration. Per-chapter ids
+ * change — annotations/notes/drawings on those old chapter rows are
+ * dropped by the cascade; their data was already on the wrong chapter.
+ * Threshold is 2, not 3: a buggy parse can produce exact 2x duplication
+ * (one row per logical chapter, twice) and a higher floor would miss it.
  */
 async function ensureChapters(
   bookId: number,
@@ -36,7 +45,40 @@ async function ensureChapters(
     .from(chapters)
     .where(eq(chapters.bookId, bookId))
     .orderBy(asc(chapters.index));
-  if (existing.length > 0 || format !== "epub") return existing;
+
+  if (existing.length > 0) {
+    const titleCounts = new Map<string, number>();
+    for (const c of existing) titleCounts.set(c.title, (titleCounts.get(c.title) ?? 0) + 1);
+    const looksBuggy = [...titleCounts.values()].some((n) => n >= 2);
+    if (!looksBuggy || format !== "epub") return existing;
+
+    // Parse first; only mutate the table once we know the new chapter list
+    // is ready — a failure mid-parse must not leave the book empty.
+    const parsed = await parseEpub(sourcePath);
+    const scrollByTitle = new Map<string, number>();
+    for (const c of existing) {
+      if (c.scrollPosition > (scrollByTitle.get(c.title) ?? 0)) {
+        scrollByTitle.set(c.title, c.scrollPosition);
+      }
+    }
+    await db.delete(chapters).where(eq(chapters.bookId, bookId));
+    for (const chapter of parsed.chapters) {
+      await db.insert(chapters).values({
+        bookId,
+        title: chapter.title,
+        index: chapter.index,
+        rawText: chapter.rawText,
+        scrollPosition: scrollByTitle.get(chapter.title) ?? 0,
+      });
+    }
+    return db
+      .select()
+      .from(chapters)
+      .where(eq(chapters.bookId, bookId))
+      .orderBy(asc(chapters.index));
+  }
+
+  if (format !== "epub") return existing;
 
   const parsed = await parseEpub(sourcePath);
   for (const chapter of parsed.chapters) {
