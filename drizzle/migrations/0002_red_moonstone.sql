@@ -1,0 +1,1 @@
+ALTER TABLE `books` ADD `prior_progress` real;

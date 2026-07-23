@@ -14,6 +14,8 @@ export interface Book {
   importedAt: string;
   lastOpenedAt: string | null;
   progress: number;
+  // Progress before a manual "mark finished"; null when not finished that way.
+  priorProgress: number | null;
   collection: string;
   trashed: number;
 }
@@ -53,6 +55,8 @@ export interface IPCPayloads {
     author?: string;
     // 0–1 reading progress; 1 = finished.
     progress?: number;
+    // Restore progress stashed when the book was marked finished.
+    restoreProgress?: boolean;
     // Absolute path to a new cover image; main copies it into covers/.
     coverSourcePath?: string;
   };

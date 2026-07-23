@@ -95,12 +95,23 @@ export function registerIpcHandlers(): void {
       title?: string;
       author?: string;
       progress?: number;
+      priorProgress?: number | null;
       coverPath?: string;
     } = {};
     if (payload.title !== undefined) patch.title = payload.title.trim() || "Untitled";
     if (payload.author !== undefined) patch.author = payload.author;
-    if (payload.progress !== undefined) {
-      patch.progress = Math.min(1, Math.max(0, payload.progress));
+
+    if (payload.restoreProgress) {
+      const prior = existing.priorProgress;
+      patch.progress =
+        prior != null && prior < 1 ? Math.min(1, Math.max(0, prior)) : 0;
+      patch.priorProgress = null;
+    } else if (payload.progress !== undefined) {
+      const next = Math.min(1, Math.max(0, payload.progress));
+      if (next >= 1 && existing.progress < 1) {
+        patch.priorProgress = existing.progress;
+      }
+      patch.progress = next;
     }
 
     if (payload.coverSourcePath) {

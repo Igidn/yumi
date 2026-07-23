@@ -84,12 +84,12 @@ function BookMenu({
   menu,
   onClose,
   onDetails,
-  onFinished,
+  onToggleFinished,
 }: {
   menu: MenuState;
   onClose: () => void;
   onDetails: () => void;
-  onFinished: () => void;
+  onToggleFinished: () => void;
 }) {
   useEffect(() => {
     const close = () => onClose();
@@ -123,14 +123,13 @@ function BookMenu({
     >
       <button
         role="menuitem"
-        disabled={finished}
         className={item}
         onClick={() => {
-          onFinished();
+          onToggleFinished();
           onClose();
         }}
       >
-        Mark as finished
+        {finished ? "Mark as still reading" : "Mark as finished"}
       </button>
       <button
         role="menuitem"
@@ -301,9 +300,15 @@ export function LibraryView({ onOpenBook }: { onOpenBook: () => void }) {
           menu={menu}
           onClose={() => setMenu(null)}
           onDetails={() => setDetailBookId(menu.book.id)}
-          onFinished={() => {
+          onToggleFinished={() => {
+            const finished = menu.book.progress >= 1;
             void window.yumi
-              .invoke("books:update", { id: menu.book.id, progress: 1 })
+              .invoke(
+                "books:update",
+                finished
+                  ? { id: menu.book.id, restoreProgress: true }
+                  : { id: menu.book.id, progress: 1 },
+              )
               .then((updated) =>
                 setBooks((prev) =>
                   prev.map((b) => (b.id === updated.id ? updated : b)),
