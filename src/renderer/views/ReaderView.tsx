@@ -161,16 +161,16 @@ export function ReaderView({ bookId }: { bookId: number }) {
   // Hyperlink navigation: push current position, jump to target chapter.
   const handleLinkNavigate = useCallback(
     (targetChapter: number, fragment: string | null) => {
+      if (targetChapter === chapterPos) {
+        // Same-chapter link: just scroll to fragment, no history entry.
+        setScrollToFragment(fragment);
+        return;
+      }
       const fraction = pageInfo?.fraction ?? 0;
       setLinkHistory((prev) => [...prev, { chapterPos, fraction }]);
       setBackButton({ side: targetChapter < chapterPos ? "right" : "left" });
-      if (targetChapter === chapterPos) {
-        // Same-chapter link: scroll to fragment.
-        setScrollToFragment(fragment);
-      } else {
-        goToChapter(targetChapter, 0);
-        setScrollToFragment(fragment);
-      }
+      goToChapter(targetChapter, 0);
+      setScrollToFragment(fragment);
     },
     [chapterPos, pageInfo?.fraction, goToChapter]
   );
