@@ -338,32 +338,106 @@ function flattenNav(toc: NavItem[]): { label: string; href: string }[] {
 /**
  * Fallback nav loader for when epubjs's auto-loaded `book.navigation` ends
  * up empty (its `parse()` misidentifies the root of some XHTML nav docs).
- * Tries toc.ncx first (almost always present), then nav.xhtml.
+ * Prefers the EPUB3 nav.xhtml (spine order), falls back to NCX.
  */
 async function loadNavManually(
   book: Book,
   nav: any
 ): Promise<{ label: string; href: string }[]> {
   const packaging: any = (book as any).packaging;
-  for (const tryPath of [packaging?.ncxPath, packaging?.navPath]) {
-    if (!tryPath) continue;
+
+  // EPUB3 nav.xhtml: parse it ourselves — epubjs's `parseNav` is unreliable
+  // (returns 0 items for valid nav docs). The nav.xhtml order matches the
+  // spine; the NCX can put backmatter entries in the wrong position.
+  if (packaging?.navPath) {
     try {
-      const doc = (await book.load(tryPath)) as unknown as Document;
-      const isNav = tryPath === packaging.navPath && tryPath !== packaging.ncxPath;
-      const items = isNav && typeof nav?.parseNav === "function"
-        ? nav.parseNav(doc)
-        : typeof nav?.parseNcx === "function"
-          ? nav.parseNcx(doc)
-          : [];
-      if (items?.length) return flattenNav(items as NavItem[]);
+      const doc = (await book.load(packaging.navPath)) as unknown as Document;
+      // Find <nav epub:type="toc">, walk its <ol>/<li>/<a> tree.
+      const navEls = doc.getElementsByTagNameNS(
+        "http://www.w3.org/1999/xhtml",
+        "nav"
+      );
+      for (let i = 0; i < navEls.length; i++) {
+        const navEl = navEls[i];
+        const epubType = navEl.getAttributeNS(
+          "http://www.idpf.org/2007/ops",
+          "type"
+        );
+        if (!epubType || !epubType.split(/\s+/).includes("toc")) continue;
+        const entries = parseNavXhtml(navEl);
+        if (entries.length > 0) {
+          // Resolve relative hrefs against the nav.xhtml's directory.
+          // nav.xhtml is at something like `Text/toc.xhtml`; its links
+          // like `cover.xhtml` are relative to `Text/`.
+          const navDir = packaging.navPath.includes("/")
+            ? packaging.navPath.substring(
+                0,
+                packaging.navPath.lastIndexOf("/") + 1
+              )
+            : "";
+          return entries.map((e) => ({
+            label: e.label,
+            href: navDir + e.href,
+          }));
+        }
+      }
     } catch {
-      // ponytail: try the next path; failure here is not fatal — the nav-less
-      // branch below still produces a usable (over-counted) chapter list.
+      // ponytail: fall through to NCX.
     }
   }
-  console.warn("[epub] nav parse failed for both NCX and nav paths; falling back to spine walk");
 
+  // EPUB2 NCX fallback.
+  if (packaging?.ncxPath) {
+    try {
+      const doc = (await book.load(packaging.ncxPath)) as unknown as Document;
+      if (typeof nav?.parseNcx === "function") {
+        const items = nav.parseNcx(doc);
+        if (items?.length) return flattenNav(items as NavItem[]);
+      }
+    } catch {
+      // ponytail: fall through to spine walk.
+    }
+  }
+
+  console.warn("[epub] nav parse failed for both nav.xhtml and NCX; falling back to spine walk");
   return [];
+}
+
+/**
+ * Walk a <nav epub:type="toc"> element and extract a flat list of
+ * { label, href } entries from its <ol>/<li>/<a> tree.
+ */
+function parseNavXhtml(navEl: Element): { label: string; href: string }[] {
+  const out: { label: string; href: string }[] = [];
+  const XHTML_NS = "http://www.w3.org/1999/xhtml";
+
+  function walkOl(ol: Element): void {
+    // epubjs uses a minimal DOM shim — `children` may not exist.
+    // Use `childNodes` and filter to element nodes (nodeType === 1).
+    const nodes = ol.childNodes;
+    if (!nodes) return;
+    for (let i = 0; i < nodes.length; i++) {
+      const li = nodes[i] as Element;
+      if (!li || li.nodeType !== 1) continue;
+      if (li.localName !== "li" && li.tagName !== "li") continue;
+      // Find the first <a> or <span> (epub:type="toc" allows span as label).
+      const a =
+        li.getElementsByTagNameNS(XHTML_NS, "a")[0] ||
+        li.getElementsByTagNameNS(XHTML_NS, "span")[0];
+      if (a) {
+        const href = a.getAttribute("href");
+        const label = (a.textContent || "").replace(/\s+/g, " ").trim();
+        if (href && label) out.push({ label, href });
+      }
+      // Recurse into nested <ol> (sub-items).
+      const childOl = li.getElementsByTagNameNS(XHTML_NS, "ol")[0];
+      if (childOl) walkOl(childOl);
+    }
+  }
+
+  const topOl = navEl.getElementsByTagNameNS(XHTML_NS, "ol")[0];
+  if (topOl) walkOl(topOl);
+  return out;
 }
 
 function chapterTitle(doc: Document, fallback: string): string {
@@ -481,13 +555,19 @@ export async function parseEpub(
   // nav.xhtml) lists each logical chapter once.
   //
   // epubjs's `book.loaded.navigation` is unreliable: it returns an empty toc
-  // for EPUBs whose nav.xhtml isn't recognised as HTML, which silently
-  // re-introduces the duplication bug. Parse the toc.ncx (or nav.xhtml as a
-  // fallback) ourselves so the flat nav is correct on every book.
+  // for EPUBs whose nav.xhtml isn't recognised as HTML, and it returns the
+  // NCX order for EPUB3 books that have both NCX and nav.xhtml (NCX order
+  // can diverge from the spine — this book's NCX lists "Color Illustrations"
+  // after "Epilogue", but the pages sit right after the cover). Always
+  // manually parse, preferring the EPUB3 nav.xhtml over NCX.
   const nav = (await book.loaded.navigation) as any;
-  let flatNav: { label: string; href: string }[] = nav?.toc?.length
-    ? flattenNav(nav.toc as NavItem[])
-    : await loadNavManually(book, nav);
+  const manualNav = await loadNavManually(book, nav);
+  let flatNav: { label: string; href: string }[] =
+    manualNav.length > 0
+      ? manualNav
+      : nav?.toc?.length
+        ? flattenNav(nav.toc as NavItem[])
+        : [];
 
   // Collect linear spine sections in order, indexed by fragment-stripped
   // href so a nav entry like `section-0009.html#auto_bookmark_toc_9` finds
@@ -538,20 +618,35 @@ export async function parseEpub(
   const spineToChapter = new Map<string, number>();
 
   const chapters: ParsedChapter[] = [];
+  // Spine indices already assigned to a chapter. When a later nav entry
+  // points backward (e.g. TOC lists "Color Illustrations" after
+  // "Epilogue" but the color pages sit right after the cover), skip it
+  // — its content was already covered by an earlier chapter.
+  let coveredUpTo = 0;
   if (flatNav.length > 0) {
     for (let i = 0; i < flatNav.length; i++) {
       const entry = flatNav[i];
       const startHref = stripFragment(entry.href);
       const startItem = spineByHref.get(startHref);
       if (!startItem) continue; // nav points outside the spine — skip
+
+      // Nav entry points to spine content already covered by a previous
+      // chapter (e.g. backmatter TOC reference to front-matter images).
+      if (startItem.index < coveredUpTo) continue;
+
       // A chapter spans every spine section from its start up to (but not
-      // including) the next nav entry's start. The last chapter runs to
-      // the end of the spine.
-      const nextStartHref =
-        i + 1 < flatNav.length ? stripFragment(flatNav[i + 1].href) : null;
-      const nextStartIndex = nextStartHref
-        ? spineByHref.get(nextStartHref)?.index ?? spineItems.length
-        : spineItems.length;
+      // including) the next *forward-pointing* nav entry's start. Skip
+      // over entries that point backward (their content is already covered
+      // by an earlier chapter). The last chapter runs to end of spine.
+      let nextStartIndex = spineItems.length;
+      for (let j = i + 1; j < flatNav.length; j++) {
+        const nextHref = stripFragment(flatNav[j].href);
+        const nextItem = spineByHref.get(nextHref);
+        if (nextItem && nextItem.index > startItem.index) {
+          nextStartIndex = nextItem.index;
+          break;
+        }
+      }
 
       // First pass: register spine→chapter mappings for ALL items in this
       // nav chapter so cross-spine-item links resolve correctly.
@@ -617,6 +712,7 @@ export async function parseEpub(
         title: entry.label,
         rawText: JSON.stringify(allBlocks),
       });
+      coveredUpTo = Math.max(coveredUpTo, nextStartIndex);
     }
   } else {
     // ponytail: nav-less fallback (rare — books without toc.ncx/nav.xhtml);
