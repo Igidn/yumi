@@ -12,8 +12,66 @@
 
   --font-logo: "Sono", ui-monospace, monospace;
   --font-ui: "Sora", ui-sans-serif, system-ui, sans-serif;
+  --font-reading: ui-serif, "New York", "Iowan Old Style", Palatino,
+    "Palatino Linotype", Georgia, serif;
 
   --shadow-shell: 4px 4px 10px 0 rgb(0 0 0 / 0.2);
+}
+
+/*
+ * Reader themes. Applied by swapping the class on the reader root; the
+ * utilities below resolve the vars, so every reader component restyles
+ * without prop-drilling colors. The dark theme is the warm "night" look of
+ * the Apple Books reference: deep olive-brown paper, cream ink, blue accent
+ * for headings.
+ */
+.reader-dark {
+  --reader-bg: #262014;
+  --reader-ink: #e8e3d8;
+  --reader-muted: #9a917c;
+  --reader-accent: #7ea8e0;
+  --reader-chrome: #322c1e;
+  --reader-edge: #4d4530;
+  color-scheme: dark;
+}
+
+.reader-sepia {
+  --reader-bg: #f3ead6;
+  --reader-ink: #463926;
+  --reader-muted: #99835f;
+  --reader-accent: #1e5cbf;
+  --reader-chrome: #ece0c6;
+  --reader-edge: #d9c9a4;
+  color-scheme: light;
+}
+
+.reader-light {
+  --reader-bg: #ffffff;
+  --reader-ink: #1c1c1e;
+  --reader-muted: #71717a;
+  --reader-accent: #0a59d0;
+  --reader-chrome: #f4f4f6;
+  --reader-edge: #e2e2e8;
+  color-scheme: light;
+}
+
+@utility bg-reader {
+  background-color: var(--reader-bg);
+}
+@utility bg-reader-chrome {
+  background-color: var(--reader-chrome);
+}
+@utility text-reader {
+  color: var(--reader-ink);
+}
+@utility text-reader-muted {
+  color: var(--reader-muted);
+}
+@utility text-reader-accent {
+  color: var(--reader-accent);
+}
+@utility border-reader-edge {
+  border-color: var(--reader-edge);
 }
 
 .app-drag {
@@ -22,4 +80,49 @@
 
 .app-no-drag {
   -webkit-app-region: no-drag;
+}
+
+/* Reading surface typography (SPEC §2). Justified, hyphenated book prose. */
+.reader-content {
+  font-family: var(--font-reading);
+  text-align: justify;
+  hyphens: auto;
+  overflow-wrap: break-word;
+  -webkit-font-smoothing: antialiased;
+}
+
+.reader-content p {
+  margin: 0;
+}
+
+/* Book convention: paragraphs after the first get a first-line indent,
+   not inter-paragraph spacing (see the Apple Books reference). */
+.reader-content p.reader-indent {
+  text-indent: 1.75em;
+}
+
+/* Keep headings glued to the paragraph that follows them. */
+.reader-content h1,
+.reader-content h2,
+.reader-content h3,
+.reader-content h4,
+.reader-content h5,
+.reader-content h6 {
+  break-after: avoid;
+  break-inside: avoid;
+}
+
+/* Flash-highlight for the block a search result jumped to. */
+@keyframes reader-flash {
+  0% {
+    background-color: color-mix(in srgb, var(--reader-accent) 38%, transparent);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+.reader-flash {
+  animation: reader-flash 1.6s ease-out;
+  border-radius: 3px;
 }

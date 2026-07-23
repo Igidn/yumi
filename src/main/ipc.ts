@@ -9,6 +9,9 @@ import {
   getCoversDir,
   importBook,
 } from "./import";
+import { loadReaderBook, saveReaderProgress } from "./reader";
+import { openReaderWindow } from "./windows";
+import { getStore } from "./store";
 import type {
   IPCChannel,
   IPCPayloads,
@@ -139,6 +142,44 @@ export function registerIpcHandlers(): void {
       .returning();
     broadcastEvent("library:changed");
     return bookForRenderer(rows[0]);
+  });
+
+  // Progress saves fire every few hundred ms while paging; re-rendering the
+  // library grid on each one is wasted work, so cap the broadcast rate.
+  let lastLibraryBroadcast = 0;
+  const broadcastLibraryChangedThrottled = () => {
+    const now = Date.now();
+    if (now - lastLibraryBroadcast < 1500) return;
+    lastLibraryBroadcast = now;
+    broadcastEvent("library:changed");
+  };
+
+  handle("reader:open", async (_, payload) => {
+    const db = await getDb();
+    const row = (
+      await db.select().from(books).where(eq(books.id, payload.id)).limit(1)
+    )[0];
+    if (!row || row.trashed) throw new Error(`Book not found: ${payload.id}`);
+
+    const now = new Date().toISOString();
+    await db
+      .update(books)
+      .set({ lastOpenedAt: now })
+      .where(eq(books.id, row.id));
+    const store = await getStore();
+    store.set("lastOpenedBookId", row.id);
+
+    await openReaderWindow(row.id, row.title || "Untitled");
+    broadcastLibraryChangedThrottled();
+  });
+
+  handle("reader:load", async (_, payload) => {
+    return loadReaderBook(payload.id);
+  });
+
+  handle("reader:progress", async (_, payload) => {
+    await saveReaderProgress(payload);
+    broadcastLibraryChangedThrottled();
   });
 
   handle("books:reveal", async (_, payload) => {

@@ -1,13 +1,13 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { LibraryView } from "./views/LibraryView";
-import { ReaderView } from "./views/ReaderView";
 import { SettingsView } from "./views/SettingsView";
 import { useImport } from "./hooks/useImport";
 import { DuplicatePrompt } from "./components/DuplicatePrompt";
+import type { Book } from "../shared/types";
 
-type View = "library" | "settings" | "reader";
+type View = "library" | "settings";
 
-const NAV_ITEMS: { id: Exclude<View, "reader">; label: string }[] = [
+const NAV_ITEMS: { id: View; label: string }[] = [
   { id: "library", label: "Library" },
   { id: "settings", label: "Settings" },
 ];
@@ -19,6 +19,11 @@ export default function App() {
 
   const { importing, importPaths, pendingDuplicate, resolveDuplicate } =
     useImport();
+
+  // Apple Books flow: clicking a cover opens the book in its own window.
+  const openBook = (book: Book) => {
+    void window.yumi.invoke("reader:open", { id: book.id });
+  };
 
   // Track nested dragenter/dragleave with a counter so the overlay doesn't
   // flicker when the cursor crosses child elements.
@@ -118,13 +123,12 @@ export default function App() {
       <main className="h-full overflow-auto pt-[83px]">
         {view === "library" && (
           <LibraryView
-            onOpenBook={() => setView("reader")}
+            onOpenBook={openBook}
             importing={importing}
             importPaths={importPaths}
           />
         )}
         {view === "settings" && <SettingsView />}
-        {view === "reader" && <ReaderView />}
       </main>
 
       {isDraggingFiles && <DropOverlay />}

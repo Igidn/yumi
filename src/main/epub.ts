@@ -12,13 +12,9 @@ if (typeof (globalThis as any).window === "undefined") {
 }
 
 import { Book, NavItem } from "epubjs";
+import type { ContentBlock } from "../shared/types";
 
-/** A flat, renderer-ready block extracted from a chapter's XHTML. */
-export interface ContentBlock {
-  type: "heading" | "paragraph";
-  level?: number; // heading level 1–6
-  text: string;
-}
+export type { ContentBlock };
 
 export interface ParsedChapter {
   /** Order within the book, matching the OPF spine. */
@@ -54,10 +50,79 @@ function textOf(node: Element): string {
   return (node.textContent || "").replace(/\s+/g, " ").trim();
 }
 
+/** Inline tags that survive into ContentBlock.html; everything else unwraps. */
+const INLINE_TAG_MAP: Record<string, string> = {
+  em: "em",
+  i: "em",
+  strong: "strong",
+  b: "strong",
+};
+
+function escapeHtmlText(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+/**
+ * Serialize a node's inline content to safe minimal HTML: text nodes are
+ * escaped, <em>/<strong>/<br> are kept, every other element is unwrapped and
+ * all attributes are dropped. The output is the only thing the renderer ever
+ * injects via dangerouslySetInnerHTML, which keeps EPUB-sourced markup from
+ * smuggling in scripts or styles.
+ */
+function inlineHtml(node: Node): string {
+  let out = "";
+  for (let i = 0; i < node.childNodes.length; i++) {
+    const child = node.childNodes[i];
+    if (child.nodeType === 3) {
+      out += escapeHtmlText(child.textContent || "");
+      continue;
+    }
+    if (child.nodeType !== 1) continue;
+    const el = child as Element;
+    const local = (el.localName || el.nodeName).toLowerCase();
+    if (local === "script" || local === "style") continue;
+    if (local === "br") {
+      out += "<br/>";
+      continue;
+    }
+    const inner = inlineHtml(el);
+    const tag = INLINE_TAG_MAP[local];
+    out += tag && inner.trim() ? `<${tag}>${inner}</${tag}>` : inner;
+  }
+  return out;
+}
+
+/**
+ * Collapse whitespace the way textOf does, but per <br>-separated segment so
+ * line breaks survive. Empty segments (leading/trailing <br>) are dropped.
+ */
+function collapseInlineHtml(html: string): string {
+  return html
+    .split(/<br\s*\/?>/)
+    .map((seg) => seg.replace(/\s+/g, " ").trim())
+    .filter((seg) => seg.length > 0)
+    .join("<br/>");
+}
+
+/** Build a block from an element, attaching html only when markup remains. */
+function makeBlock(
+  type: ContentBlock["type"],
+  node: Element,
+  level?: number
+): ContentBlock | null {
+  const text = textOf(node);
+  if (!text) return null;
+  const html = collapseInlineHtml(inlineHtml(node));
+  const block: ContentBlock = { type, text };
+  if (level !== undefined) block.level = level;
+  if (html.includes("<")) block.html = html;
+  return block;
+}
+
 /**
  * Walk the body of an XHTML document and emit structured blocks:
  * headings (h1–h6) and paragraphs. Nested block children of <p> collapse into
- * the paragraph text. <br> inside a paragraph becomes a space.
+ * the paragraph text. <br> inside a paragraph becomes a line break in html.
  */
 function extractBlocks(doc: Document): ContentBlock[] {
   const body =
@@ -80,24 +145,22 @@ function extractBlocks(doc: Document): ContentBlock[] {
       if (skip.has(nsLocal)) continue;
 
       if (/^h[1-6]$/.test(nsLocal)) {
-        const text = textOf(node);
-        if (text) {
-          blocks.push({ type: "heading", level: +nsLocal[1], text });
-        }
+        const block = makeBlock("heading", node, +nsLocal[1]);
+        if (block) blocks.push(block);
         continue;
       }
 
       if (nsLocal === "p" || nsLocal === "blockquote") {
-        const text = textOf(node);
-        if (text) blocks.push({ type: "paragraph", text });
+        const block = makeBlock("paragraph", node);
+        if (block) blocks.push(block);
         continue;
       }
 
       // Unrecognized block: recurse — catches sections, divs, lists.
       // Lists become paragraphs per item to keep prose readable.
       if (nsLocal === "li") {
-        const text = textOf(node);
-        if (text) blocks.push({ type: "paragraph", text });
+        const block = makeBlock("paragraph", node);
+        if (block) blocks.push(block);
         continue;
       }
 
