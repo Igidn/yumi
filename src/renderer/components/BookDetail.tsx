@@ -209,6 +209,8 @@ export function BookDetail({
 
             <dl className="mt-5 space-y-2 text-[12px]">
               <Row label="Format" value={draft.format.toUpperCase()} />
+              {/* ponytail: page count arrives with the reader */}
+              <Row label="Pages" value="—" />
               <Row label="Progress" value={progressLabel(draft)} />
               <Row label="Imported" value={formatDate(draft.importedAt)} />
               <Row label="Last opened" value={formatDate(draft.lastOpenedAt)} />
