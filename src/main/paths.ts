@@ -1,3 +1,4 @@
+import fs from "fs";
 import path from "path";
 import os from "os";
 
@@ -27,3 +28,15 @@ export function getUserDataPath(): string {
 }
 
 export const dbPath = path.join(getUserDataPath(), "yumi.db");
+
+export function getBooksDir(): string {
+  const dir = path.join(getUserDataPath(), "books");
+  fs.mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
+export function getCoversDir(): string {
+  const dir = path.join(getUserDataPath(), "covers");
+  fs.mkdirSync(dir, { recursive: true });
+  return dir;
+}

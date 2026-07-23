@@ -1,12 +1,16 @@
 import type Store from "electron-store";
 
+interface WindowBounds {
+  width: number;
+  height: number;
+  x?: number;
+  y?: number;
+}
+
 export interface StoreSchema {
-  windowBounds: {
-    width: number;
-    height: number;
-    x?: number;
-    y?: number;
-  };
+  windowBounds: WindowBounds;
+  // Reader windows (one per book) share a single saved size/position.
+  readerWindowBounds: WindowBounds;
   lastOpenedBookId: number | null;
 }
 
@@ -30,6 +34,7 @@ export async function getStore(): Promise<TypedStore> {
   const instance = new StoreConstructor<StoreSchema>({
     defaults: {
       windowBounds: { width: 1200, height: 800 },
+      readerWindowBounds: { width: 1160, height: 840 },
       lastOpenedBookId: null,
     },
   }) as unknown as Store<StoreSchema>;

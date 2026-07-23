@@ -12,7 +12,7 @@ export function LibraryView({
   importing,
   importPaths,
 }: {
-  onOpenBook: () => void;
+  onOpenBook: (book: Book) => void;
   importing: boolean;
   importPaths: (paths: string[]) => Promise<{
     ok: number;
@@ -205,7 +205,7 @@ export function LibraryView({
             <BookCard
               key={book.id}
               book={book}
-              onOpen={onOpenBook}
+              onOpen={() => onOpenBook(book)}
               onMenu={(pos) => setMenu({ book, ...pos })}
             />
           ))}

@@ -2,11 +2,9 @@ import { app, BrowserWindow, net, protocol } from "electron";
 import path from "path";
 import { pathToFileURL } from "url";
 import { registerIpcHandlers, broadcastEvent } from "./ipc";
-import { getStore } from "./store";
 import { importBook } from "./import";
 import { getUserDataPath } from "./paths";
-
-const isDev = process.env.NODE_ENV !== "production";
+import { createMainWindow } from "./windows";
 
 // Must run before app is ready. Lets <img src="yumi://asset/..."> load covers
 // from the userData directory (renderer can't use bare file:// paths).
@@ -46,7 +44,7 @@ app.on("open-file", (event, filePath) => {
   // No live window to receive the drop: spin one up so buffered files get
   // drained on did-finish-load rather than left orphaned until activation.
   if (!mainWindow || mainWindow.isDestroyed()) {
-    void createWindow();
+    void openMainWindow();
   }
 });
 
@@ -63,60 +61,19 @@ async function handleOpenFile(filePath: string): Promise<void> {
   }
 }
 
-async function createWindow() {
-  const store = await getStore();
-  const bounds = store.get("windowBounds");
-
-  const win = new BrowserWindow({
-    width: bounds.width,
-    height: bounds.height,
-    x: bounds.x,
-    y: bounds.y,
-    minWidth: 800,
-    minHeight: 600,
-    title: "Yumi",
-    titleBarStyle: "hidden",
-    trafficLightPosition: { x: 16, y: 18 },
-    webPreferences: {
-      preload: path.join(__dirname, "preload.js"),
-      contextIsolation: true,
-      nodeIntegration: false,
+async function openMainWindow(): Promise<void> {
+  const win = await createMainWindow({
+    onDidFinishLoad: () => {
+      while (pendingOpenFiles.length > 0) {
+        const file = pendingOpenFiles.shift()!;
+        void handleOpenFile(file);
+      }
+    },
+    onClosed: () => {
+      if (mainWindow === win) mainWindow = null;
     },
   });
-
   mainWindow = win;
-
-  // Don't let an accidental file drop navigate the window to a `file://`
-  // URL; the renderer handles imports via IPC.
-  win.webContents.on("will-navigate", (event) => {
-    event.preventDefault();
-  });
-
-  const saveBounds = () => {
-    const b = win.getNormalBounds();
-    store.set("windowBounds", b);
-  };
-
-  win.on("resize", saveBounds);
-  win.on("move", saveBounds);
-  win.on("moved", saveBounds);
-
-  win.webContents.once("did-finish-load", () => {
-    while (pendingOpenFiles.length > 0) {
-      const file = pendingOpenFiles.shift()!;
-      void handleOpenFile(file);
-    }
-  });
-
-  win.on("closed", () => {
-    if (mainWindow === win) mainWindow = null;
-  });
-
-  if (isDev) {
-    await win.loadURL("http://localhost:5173");
-  } else {
-    await win.loadFile(path.join(__dirname, "..", "renderer", "index.html"));
-  }
 }
 
 function registerAssetProtocol(): void {
@@ -139,7 +96,7 @@ function registerAssetProtocol(): void {
 app.whenReady().then(async () => {
   registerAssetProtocol();
   registerIpcHandlers();
-  await createWindow();
+  await openMainWindow();
 });
 
 app.on("window-all-closed", () => {
@@ -147,5 +104,5 @@ app.on("window-all-closed", () => {
 });
 
 app.on("activate", () => {
-  if (BrowserWindow.getAllWindows().length === 0) createWindow();
+  if (BrowserWindow.getAllWindows().length === 0) void openMainWindow();
 });

@@ -26,6 +26,41 @@ export interface Book {
  */
 export type YumiEvent = "library:changed";
 
+/** A flat, renderer-ready block extracted from a chapter's XHTML. */
+export interface ContentBlock {
+  type: "heading" | "paragraph" | "image";
+  level?: number; // heading level 1–6
+  text: string;
+  /**
+   * Minimal inline markup for this block, built by the EPUB parser from a
+   * strict whitelist: only <em>/<strong>/<br>, no attributes, all text
+   * escaped. Present only when the block actually contains markup, so it is
+   * safe to inject via dangerouslySetInnerHTML.
+   */
+  html?: string;
+  /** Image blocks only: path relative to userData root, served via yumi://asset/ */
+  src?: string;
+}
+
+/** A chapter as shipped to the reader window (blocks parsed from rawText). */
+export interface ReaderChapter {
+  id: number;
+  title: string;
+  /** Order within the book, matching the OPF spine. */
+  index: number;
+  /** Saved reading position inside this chapter, 0–1. */
+  scrollPosition: number;
+  blocks: ContentBlock[];
+}
+
+/** Everything the reader window needs to render a book, in one round-trip. */
+export interface ReaderPayload {
+  book: Book;
+  chapters: ReaderChapter[];
+  /** Position in `chapters` to resume at (derived from books.progress). */
+  resumeChapterPos: number;
+}
+
 export type IPCChannel =
   | "settings:get"
   | "settings:set"
@@ -33,6 +68,9 @@ export type IPCChannel =
   | "books:insert"
   | "books:update"
   | "books:reveal"
+  | "reader:open"
+  | "reader:load"
+  | "reader:progress"
   | "import:book"
   | "dialog:openFile"
   | "dialog:openImage"
@@ -61,6 +99,18 @@ export interface IPCPayloads {
     coverSourcePath?: string;
   };
   "books:reveal": { id: number };
+  // Library → main: open (or focus) the reader window for a book.
+  "reader:open": { id: number };
+  // Reader window → main: request book + chapters for rendering.
+  "reader:load": { id: number };
+  "reader:progress": {
+    bookId: number;
+    chapterId: number;
+    // 0–1 position inside the chapter.
+    chapterPosition: number;
+    // 0–1 position across the whole book.
+    bookProgress: number;
+  };
   "import:book": {
     sourcePath: string;
     // Resolution for a detected duplicate. Omit ("prompt") to detect and
@@ -80,6 +130,9 @@ export interface IPCResponses {
   "books:insert": Book;
   "books:update": Book;
   "books:reveal": void;
+  "reader:open": void;
+  "reader:load": ReaderPayload;
+  "reader:progress": void;
   "import:book": ImportOutcome;
   "dialog:openFile": string[];
   "dialog:openImage": string | null;
