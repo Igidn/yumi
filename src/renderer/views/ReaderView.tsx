@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { List, Search } from "lucide-react";
+import { List, Search, Undo2 } from "lucide-react";
 import type { ReaderPayload } from "../../shared/types";
 import {
   PagedChapter,
@@ -389,30 +389,6 @@ export function ReaderView({ bookId }: { bookId: number }) {
           onOverflow={handleOverflow}
           onLinkNavigate={handleLinkNavigate}
         />
-        {backButton && (
-          <button
-            onClick={handleBack}
-            className={`absolute bottom-4 z-20 flex items-center gap-1.5 rounded-full bg-reader-chrome px-3.5 py-2 text-[13px] font-medium text-reader shadow-lg transition-opacity hover:opacity-80 border border-reader-edge ${
-              backButton.side === "left" ? "left-4" : "right-4"
-            }`}
-            aria-label="Back to previous page"
-          >
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.25"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M19 12H5" />
-              <path d="M12 19l-7-7 7-7" />
-            </svg>
-            Back
-          </button>
-        )}
         </div>
       ) : (
         <div className="flex flex-1 items-center justify-center px-8">
@@ -422,13 +398,41 @@ export function ReaderView({ bookId }: { bookId: number }) {
         </div>
       )}
 
-      {/* Footer: current page, Apple Books style */}
-      <footer className="flex h-[30px] shrink-0 select-none items-center justify-center">
-        {chapter && pageLabel !== null && (
-          <span className="text-[12px] tabular-nums text-reader-muted">
-            {pageLabel}
-          </span>
-        )}
+      {/* Footer: back button + page indicator, Apple Books style */}
+      <footer className="flex h-[36px] shrink-0 select-none items-center justify-between px-4">
+        <div className="flex-1">
+          {backButton && backButton.side === "left" && (
+            <button
+              onClick={handleBack}
+              className="app-no-drag flex items-center gap-1 text-[12px] text-reader-muted transition-colors hover:text-reader"
+              aria-label="Back to previous page"
+            >
+              <Undo2 size={14} strokeWidth={1.75} />
+              Back
+            </button>
+          )}
+        </div>
+
+        <div className="flex-1 text-center">
+          {chapter && pageLabel !== null && (
+            <span className="text-[12px] tabular-nums text-reader-muted">
+              {pageLabel}
+            </span>
+          )}
+        </div>
+
+        <div className="flex-1 flex justify-end">
+          {backButton && backButton.side === "right" && (
+            <button
+              onClick={handleBack}
+              className="app-no-drag flex items-center gap-1 text-[12px] text-reader-muted transition-colors hover:text-reader"
+              aria-label="Back to previous page"
+            >
+              Back
+              <Undo2 size={14} strokeWidth={1.75} className="scale-x-[-1]" />
+            </button>
+          )}
+        </div>
       </footer>
 
       {/* Panels */}
