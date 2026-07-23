@@ -17,7 +17,8 @@ export default function App() {
   const navRef = useRef<HTMLElement>(null);
   const [pill, setPill] = useState({ left: 0, width: 0 });
 
-  const { importPaths, pendingDuplicate, resolveDuplicate } = useImport();
+  const { importing, importPaths, pendingDuplicate, resolveDuplicate } =
+    useImport();
 
   // Track nested dragenter/dragleave with a counter so the overlay doesn't
   // flicker when the cursor crosses child elements.
@@ -116,7 +117,11 @@ export default function App() {
 
       <main className="h-full overflow-auto pt-[83px]">
         {view === "library" && (
-          <LibraryView onOpenBook={() => setView("reader")} />
+          <LibraryView
+            onOpenBook={() => setView("reader")}
+            importing={importing}
+            importPaths={importPaths}
+          />
         )}
         {view === "settings" && <SettingsView />}
         {view === "reader" && <ReaderView />}

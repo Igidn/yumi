@@ -1,15 +1,25 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowDownNarrowWide, ArrowUpNarrowWide, Plus, Search } from "lucide-react";
 import type { Book } from "../../shared/types";
-import { useImport } from "../hooks/useImport";
-import { DuplicatePrompt } from "../components/DuplicatePrompt";
 import { BookDetail } from "../components/BookDetail";
 import { BookCard } from "../components/BookCard";
 import { BookMenu, type MenuState } from "../components/BookMenu";
 import { SortMenu } from "../components/SortMenu";
 import { SORT_OPTIONS, compareBooks, type SortKey } from "../library/sort";
 
-export function LibraryView({ onOpenBook }: { onOpenBook: () => void }) {
+export function LibraryView({
+  onOpenBook,
+  importing,
+  importPaths,
+}: {
+  onOpenBook: () => void;
+  importing: boolean;
+  importPaths: (paths: string[]) => Promise<{
+    ok: number;
+    skipped: number;
+    failed: { path: string; error: string }[];
+  }>;
+}) {
   const [books, setBooks] = useState<Book[]>([]);
   const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>({
@@ -21,8 +31,6 @@ export function LibraryView({ onOpenBook }: { onOpenBook: () => void }) {
   const [detailBookId, setDetailBookId] = useState<number | null>(null);
   const [menu, setMenu] = useState<MenuState | null>(null);
   const sortTriggerRef = useRef<HTMLButtonElement | null>(null);
-  const { importing, importPaths, pendingDuplicate, resolveDuplicate } =
-    useImport();
 
   const fetchBooks = () => window.yumi.invoke("books:list").then(setBooks);
 
@@ -149,13 +157,6 @@ export function LibraryView({ onOpenBook }: { onOpenBook: () => void }) {
         >
           {importMessage}
         </p>
-      )}
-
-      {pendingDuplicate && (
-        <DuplicatePrompt
-          pending={pendingDuplicate}
-          onResolve={resolveDuplicate}
-        />
       )}
 
       {detailBook && (
