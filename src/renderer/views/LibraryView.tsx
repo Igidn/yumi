@@ -163,6 +163,9 @@ export function LibraryView({
         <BookDetail
           book={detailBook}
           onClose={() => setDetailBookId(null)}
+          onDelete={() => {
+            void window.yumi.invoke("books:delete", { id: detailBook.id });
+          }}
           onUpdated={(updated) =>
             setBooks((prev) =>
               prev.map((b) => (b.id === updated.id ? updated : b)),
@@ -177,7 +180,9 @@ export function LibraryView({
           onClose={() => setMenu(null)}
           onDetails={() => setDetailBookId(menu.book.id)}
           onDelete={() => {
-            void window.yumi.invoke("books:delete", { id: menu.book.id });
+            if (window.confirm(`Delete "${menu.book.title}"?`)) {
+              void window.yumi.invoke("books:delete", { id: menu.book.id });
+            }
           }}
           onToggleFinished={() => {
             const finished = menu.book.progress >= 1;
