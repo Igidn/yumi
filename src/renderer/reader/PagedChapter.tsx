@@ -282,50 +282,59 @@ export function PagedChapter({
   return (
     <div ref={viewportRef} className="relative min-w-0 flex-1 overflow-hidden">
       <div className="absolute inset-0 flex items-center justify-center">
+        {/* Clip to the current spread so neighbor columns can't bleed into the margins. */}
         <div
-          ref={contentRef}
-          lang="en"
-          className="reader-content text-reader transition-transform duration-200 ease-out"
+          className="overflow-hidden"
           style={{
             width: geom ? geom.contentWidth : "100%",
             height: geom ? geom.contentHeight : "100%",
-            columnWidth: geom ? geom.colWidth : undefined,
-            columnGap: geom ? geom.colGap : undefined,
-            columnFill: "auto",
-            fontSize,
-            lineHeight,
-            transform: geom
-              ? `translateX(${-spread * geom.perSpread * geom.stride}px)`
-              : undefined,
             visibility: geom ? "visible" : "hidden",
           }}
         >
-          {/* Drop the chapter opener down the page, book-style. */}
-          <div aria-hidden style={{ height: 48 }} />
-          {chapter.blocks.map((block, i) => {
-            const body = block.html ? (
-              <span dangerouslySetInnerHTML={{ __html: block.html }} />
-            ) : (
-              block.text
-            );
-            if (block.type === "heading") {
-              const level = Math.min(6, Math.max(1, block.level ?? 1));
-              const Tag = `h${level}` as "h1";
-              return (
-                <Tag key={i} data-b={i} className={headingClass(level, i === 0)}>
-                  {body}
-                </Tag>
+          <div
+            ref={contentRef}
+            lang="en"
+            className="reader-content text-reader transition-transform duration-200 ease-out"
+            style={{
+              width: geom ? geom.contentWidth : "100%",
+              height: geom ? geom.contentHeight : "100%",
+              columnWidth: geom ? geom.colWidth : undefined,
+              columnGap: geom ? geom.colGap : undefined,
+              columnFill: "auto",
+              fontSize,
+              lineHeight,
+              transform: geom
+                ? `translateX(${-spread * geom.perSpread * geom.stride}px)`
+                : undefined,
+            }}
+          >
+            {/* Drop the chapter opener down the page, book-style. */}
+            <div aria-hidden style={{ height: 48 }} />
+            {chapter.blocks.map((block, i) => {
+              const body = block.html ? (
+                <span dangerouslySetInnerHTML={{ __html: block.html }} />
+              ) : (
+                block.text
               );
-            }
-            // Book convention: no indent on a paragraph right after a
-            // heading; every paragraph after another paragraph is indented.
-            const indent = i > 0 && chapter.blocks[i - 1].type === "paragraph";
-            return (
-              <p key={i} data-b={i} className={indent ? "reader-indent" : undefined}>
-                {body}
-              </p>
-            );
-          })}
+              if (block.type === "heading") {
+                const level = Math.min(6, Math.max(1, block.level ?? 1));
+                const Tag = `h${level}` as "h1";
+                return (
+                  <Tag key={i} data-b={i} className={headingClass(level, i === 0)}>
+                    {body}
+                  </Tag>
+                );
+              }
+              // Book convention: no indent on a paragraph right after a
+              // heading; every paragraph after another paragraph is indented.
+              const indent = i > 0 && chapter.blocks[i - 1].type === "paragraph";
+              return (
+                <p key={i} data-b={i} className={indent ? "reader-indent" : undefined}>
+                  {body}
+                </p>
+              );
+            })}
+          </div>
         </div>
       </div>
 
