@@ -197,6 +197,7 @@ export function PagedChapter({
   // Off until the user pages — avoids animating the post-measure landing spread
   // (e.g. chapter overflow back onto the previous chapter's last page).
   const [animate, setAnimate] = useState(false);
+  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
 
   // Position bookkeeping across geometry changes; reseeded on chapter
   // switch, kept up to date as the user pages.
@@ -356,6 +357,16 @@ export function PagedChapter({
     });
   }, [geom, onOverflow]);
 
+  // Global Escape for lightbox
+  useEffect(() => {
+    if (!lightboxSrc) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setLightboxSrc(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [lightboxSrc]);
+
   // Page-turn keys live here (they need the spread state); ReaderView keeps
   // chapter-level and panel shortcuts.
   useEffect(() => {
@@ -418,13 +429,15 @@ export function PagedChapter({
             <div aria-hidden style={{ height: 48 }} />
             {chapter.blocks.map((block, i) => {
               if (block.type === "image" && block.src) {
+                const src = `yumi://asset/${block.src}`;
                 return (
                   <img
                     key={i}
                     data-b={i}
-                    src={`yumi://asset/${block.src}`}
+                    src={src}
                     alt={block.text || ""}
-                    className="reader-image"
+                    className="reader-image cursor-zoom-in"
+                    onClick={() => setLightboxSrc(src)}
                   />
                 );
               }
@@ -455,6 +468,17 @@ export function PagedChapter({
           </div>
         </div>
       </div>
+
+      {/* Lightbox */}
+      {lightboxSrc && (
+        <div
+          className="reader-lightbox"
+          onClick={() => setLightboxSrc(null)}
+          onKeyDown={(e) => { if (e.key === "Escape") setLightboxSrc(null); }}
+        >
+          <img src={lightboxSrc} alt="" className="reader-lightbox-img" />
+        </div>
+      )}
 
       {/* Margin click-zones turn pages, like Apple Books. */}
       {geom && (
