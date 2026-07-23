@@ -43,13 +43,6 @@ const MAX_IMAGE_SIZE_BYTES = 50 * 1024 * 1024;
 // EPUB wrapper — replaces epubjs Book
 // ---------------------------------------------------------------------------
 
-/** Simple TOC entry type (was NavItem from epubjs). */
-interface NavItem {
-  label: string;
-  href: string;
-  subitems?: NavItem[];
-}
-
 const MIME_BY_EXT: Record<string, string> = {
   jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png",
   gif: "image/gif", webp: "image/webp", svg: "image/svg+xml",
@@ -517,21 +510,6 @@ function makeLinkResolver(
 // Navigation / TOC parsing
 // ---------------------------------------------------------------------------
 
-function flattenNav(toc: NavItem[]): { label: string; href: string }[] {
-  const out: { label: string; href: string }[] = [];
-  const visit = (items: NavItem[]) => {
-    for (const item of items) {
-      if (item.href && item.label) {
-        const label = item.label.replace(/\s+/g, " ").trim();
-        if (label) out.push({ label, href: item.href });
-      }
-      if (item.subitems) visit(item.subitems);
-    }
-  };
-  visit(toc);
-  return out;
-}
-
 /** Parse EPUB3 nav.xhtml's <nav epub:type="toc"> into a flat list. */
 function parseNavXhtml(navEl: Element): { label: string; href: string }[] {
   const out: { label: string; href: string }[] = [];
@@ -709,10 +687,11 @@ export async function parseEpub(
     }
     const spineItems: SpineRef[] = [];
     const spineByHref = new Map<string, SpineRef>();
+    let spineIdx = 0;
     for (let i = 0; i < epub.spine.length; i++) {
       const s = epub.spine[i];
       if (s.linear === "no") continue;
-      const ref: SpineRef = { index: i, href: s.href };
+      const ref: SpineRef = { index: spineIdx++, href: s.href };
       spineItems.push(ref);
       const base = stripFragment(s.href);
       if (!spineByHref.has(base)) spineByHref.set(base, ref);
@@ -726,13 +705,9 @@ export async function parseEpub(
         : null;
     if (imageDir) fs.mkdirSync(imageDir, { recursive: true });
 
-    /** Extract image blob from archive with case-insensitive fallback. */
-    async function getImageBlob(href: string): Promise<Blob | null> {
-      const archivePath = epub.resolve(href);
-      const blob = await epub.getBlob(archivePath);
-      if (blob) return blob;
-      // Case-insensitive fallback — getBlob already handles this via findFile.
-      return null;
+    /** Extract image blob from archive (href is already resolved relative to the XHTML doc). */
+    function getImageBlob(href: string): Promise<Blob | null> {
+      return epub.getBlob("/" + href);
     }
 
     const spineToChapter = new Map<string, number>();
