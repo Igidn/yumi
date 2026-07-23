@@ -1,29 +1,15 @@
 import fs from "fs";
 import path from "path";
-
-// epubjs is a browser library: its Archive.getText reaches for
-// `window.decodeURIComponent`. In the main process there is no window, so
-// polyfill the handful of globals it actually touches before we import it.
-// ponytail: minimal window shim — only what archive.getText/request needs.
-if (typeof (globalThis as any).window === "undefined") {
-  (globalThis as any).window = {
-    decodeURIComponent: decodeURIComponent,
-    URL: URL,
-  };
-}
-
-import { Book, NavItem } from "epubjs";
+import JSZip from "jszip";
+import { DOMParser } from "@xmldom/xmldom";
 import type { ContentBlock } from "../shared/types";
 import { getCoversDir } from "./paths";
 
 export type { ContentBlock };
 
 export interface ParsedChapter {
-  /** Order within the book, matching the OPF spine. */
   index: number;
-  /** Title from the OPF/toc href, falling back to "Chapter N". */
   title: string;
-  /** JSON-serialized ContentBlock[] — what goes into chapters.raw_text. */
   rawText: string;
 }
 
@@ -33,10 +19,8 @@ export interface ParsedEpub {
   chapters: ParsedChapter[];
 }
 
-/** Cover bytes pulled out of an EPUB for the library grid. */
 export interface EpubCover {
   data: Buffer;
-  /** File extension without dot, e.g. "jpg". */
   ext: string;
 }
 
@@ -46,17 +30,243 @@ export interface EpubMeta {
   cover: EpubCover | null;
 }
 
-const XHTML_NS = "http://www.w3.org/1999/xhtml";
+export interface LinkTarget {
+  chapterIndex: number;
+  fragment?: string;
+}
 
-/** Safety limits for image extraction so a malicious or manga-sized EPUB doesn't exhaust disk. */
+const XHTML_NS = "http://www.w3.org/1999/xhtml";
 const MAX_EXTRACTED_IMAGES = 500;
-const MAX_IMAGE_SIZE_BYTES = 50 * 1024 * 1024; // 50 MB per image
+const MAX_IMAGE_SIZE_BYTES = 50 * 1024 * 1024;
+
+// ---------------------------------------------------------------------------
+// EPUB wrapper — replaces epubjs Book
+// ---------------------------------------------------------------------------
+
+const MIME_BY_EXT: Record<string, string> = {
+  jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png",
+  gif: "image/gif", webp: "image/webp", svg: "image/svg+xml",
+  bmp: "image/bmp",
+};
+
+class Epub {
+  private zip: JSZip;
+  /** case-insensitive path → actual zip entry path */
+  private fileMap: Map<string, string>;
+  opfDir: string;
+  metadata: { title: string; creator: string };
+  spine: Array<{ href: string; linear: string; index: number }>;
+  navPath: string | null;
+  ncxPath: string | null;
+  coverHref: string | null;
+
+  private constructor(zip: JSZip) {
+    this.zip = zip;
+    this.fileMap = new Map();
+    this.opfDir = "";
+    this.metadata = { title: "", creator: "" };
+    this.spine = [];
+    this.navPath = null;
+    this.ncxPath = null;
+    this.coverHref = null;
+  }
+
+  static async open(filePath: string): Promise<Epub> {
+    const data = await fs.promises.readFile(filePath);
+    const zip = await JSZip.loadAsync(data);
+
+    // Build case-insensitive file map
+    const fileMap = new Map<string, string>();
+    for (const key of Object.keys(zip.files)) {
+      if (zip.files[key].dir) continue;
+      const clean = key.replace(/^\/+/, "").replace(/\/+$/, "");
+      if (clean) fileMap.set(clean.toLowerCase(), clean);
+    }
+
+    // Parse container.xml
+    const containerXml = await zip.file("META-INF/container.xml")?.async("string");
+    if (!containerXml) throw new Error("Invalid EPUB: missing container.xml");
+    const containerDoc = parseXml(containerXml);
+    const rootfile = containerDoc.getElementsByTagName("rootfile")[0];
+    if (!rootfile) throw new Error("Invalid EPUB: no rootfile in container.xml");
+    const opfPath = rootfile.getAttribute("full-path") || "";
+
+    const epub = new Epub(zip);
+    epub.fileMap = fileMap;
+    epub.opfDir = opfPath.includes("/") ? opfPath.substring(0, opfPath.lastIndexOf("/") + 1) : "";
+
+    // Parse OPF
+    const opfXmlStr = await epub.readText(opfPath);
+    if (!opfXmlStr) throw new Error("Invalid EPUB: OPF file not found");
+    const opfDoc = parseXml(opfXmlStr);
+
+    // Metadata
+    epub.metadata = parseMetadata(opfDoc);
+
+    // Manifest: id → { href, mediaType, properties }
+    const manifest = new Map<string, { href: string; mediaType: string; properties: string[] }>();
+    const manifestNode = opfDoc.getElementsByTagName("manifest")[0];
+    if (manifestNode) {
+      const items = manifestNode.getElementsByTagName("item");
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        const id = item.getAttribute("id") || "";
+        const href = item.getAttribute("href") || "";
+        const mediaType = item.getAttribute("media-type") || "";
+        const props = (item.getAttribute("properties") || "").split(/\s+/).filter(Boolean);
+        manifest.set(id, { href, mediaType, properties: props });
+
+        if (props.includes("nav")) epub.navPath = href;
+        if (props.includes("cover-image")) epub.coverHref = href;
+      }
+    }
+
+    // NCX path (EPUB2)
+    if (!epub.ncxPath) {
+      for (const [, m] of manifest) {
+        if (m.mediaType === "application/x-dtbncx+xml") {
+          epub.ncxPath = m.href;
+          break;
+        }
+      }
+    }
+
+    // Spine
+    const spineNode = opfDoc.getElementsByTagName("spine")[0];
+
+    // Spine toc attribute fallback for NCX
+    if (!epub.ncxPath && spineNode) {
+      const tocId = spineNode.getAttribute("toc");
+      if (tocId) {
+        const m = manifest.get(tocId);
+        if (m) epub.ncxPath = m.href;
+      }
+    }
+
+    if (spineNode) {
+      const spineItems = spineNode.getElementsByTagName("itemref");
+      for (let i = 0; i < spineItems.length; i++) {
+        const itemref = spineItems[i];
+        const idref = itemref.getAttribute("idref") || "";
+        const linear = itemref.getAttribute("linear") || "yes";
+        const mi = manifest.get(idref);
+        if (mi) {
+          epub.spine.push({ href: mi.href, linear, index: i });
+        }
+      }
+    }
+
+    // EPUB2 cover fallback
+    if (!epub.coverHref) {
+      const metaNodes = opfDoc.getElementsByTagName("meta");
+      for (let i = 0; i < metaNodes.length; i++) {
+        if (metaNodes[i].getAttribute("name") === "cover") {
+          const coverId = metaNodes[i].getAttribute("content");
+          if (coverId) {
+            const m = manifest.get(coverId);
+            if (m) epub.coverHref = m.href;
+          }
+          break;
+        }
+      }
+    }
+
+    return epub;
+  }
+
+  /** Resolve an EPUB href (relative to OPF) to an absolute archive path. */
+  resolve(href: string): string {
+    if (!href) return "";
+    if (href.includes("://")) return href;
+    let resolved = href;
+    if (this.opfDir) {
+      resolved = resolveHref(this.opfDir, href);
+    }
+    return "/" + resolved;
+  }
+
+  /** Load an XHTML or XML file from the archive and parse it as a DOM Document. */
+  async load(href: string): Promise<Document> {
+    const resolved = this.resolve(href).replace(/^\/+/, "");
+    const text = await this.readText(resolved);
+    if (text === null) throw new Error(`File not found in EPUB: ${resolved}`);
+    const clean = text.charCodeAt(0) === 0xFEFF ? text.slice(1) : text;
+    return parseXml(clean, "application/xhtml+xml");
+  }
+
+  /** Get a binary file from the archive as a Blob. Path must start with "/". */
+  async getBlob(archivePath: string): Promise<Blob | null> {
+    const key = archivePath.replace(/^\/+/, "");
+    const entry = this.findFile(key);
+    if (!entry) return null;
+    const uint8 = await this.zip.file(entry)?.async("uint8array");
+    if (!uint8) return null;
+    const ext = pathExt(key);
+    const mimeType = MIME_BY_EXT[ext] || "";
+    return new Blob([Buffer.from(uint8)], { type: mimeType });
+  }
+
+  /** Case-insensitive file lookup. Returns the actual zip entry name or null. */
+  findFile(href: string): string | null {
+    const clean = href.replace(/^\/+/, "").replace(/\/+$/, "");
+    if (!clean) return null;
+    // Try exact match first
+    if (this.zip.file(clean)) return clean;
+    // Case-insensitive fallback
+    return this.fileMap.get(clean.toLowerCase()) ?? null;
+  }
+
+  /** Read a text file from the archive. Returns null if not found. */
+  private async readText(href: string): Promise<string | null> {
+    const clean = href.replace(/^\/+/, "");
+    const actual = this.findFile(clean);
+    if (!actual) return null;
+    const text = await this.zip.file(actual)?.async("string");
+    return text ?? null;
+  }
+
+  destroy(): void {
+    // ponytail: JSZip needs no explicit teardown.
+  }
+}
+
+// ---------------------------------------------------------------------------
+// DOM helpers
+// ---------------------------------------------------------------------------
+
+function parseXml(xml: string, mimeType = "application/xml"): Document {
+  // @xmldom/xmldom Document is compatible at runtime but its TS shape
+  // doesn't include browser-specific members like URL, alinkColor, etc.
+  return new DOMParser().parseFromString(xml, mimeType) as unknown as Document;
+}
 
 function textOf(node: Element): string {
   return (node.textContent || "").replace(/\s+/g, " ").trim();
 }
 
-/** Inline tags that survive into ContentBlock.html; everything else unwraps. */
+// ---------------------------------------------------------------------------
+// Metadata extraction
+// ---------------------------------------------------------------------------
+
+function parseMetadata(opfDoc: Document): { title: string; creator: string } {
+  const metadataNode = opfDoc.getElementsByTagName("metadata")[0];
+  if (!metadataNode) return { title: "Untitled", creator: "" };
+  const title = getElementText(metadataNode, "title");
+  const creator = getElementText(metadataNode, "creator");
+  return { title: title || "Untitled", creator };
+}
+
+function getElementText(xml: Element, tag: string): string {
+  const found = xml.getElementsByTagNameNS("http://purl.org/dc/elements/1.1/", tag);
+  if (!found || found.length === 0) return "";
+  const el = found[0];
+  return (el.textContent || "").trim();
+}
+
+// ---------------------------------------------------------------------------
+// Inline HTML serialization
+// ---------------------------------------------------------------------------
+
 const INLINE_TAG_MAP: Record<string, string> = {
   em: "em",
   i: "em",
@@ -69,18 +279,6 @@ function escapeHtmlText(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-/** Resolved target for an <a href> inside EPUB content. */
-export interface LinkTarget {
-  chapterIndex: number;
-  fragment?: string;
-}
-
-/**
- * Serialize a node's inline content to safe minimal HTML: text nodes are
- * escaped, <em>/<strong>/<a>/<br> are kept, every other element is unwrapped
- * and all attributes are dropped. For <a> tags the resolver maps the href
- * to a chapter index so the renderer can navigate without re-parsing paths.
- */
 function inlineHtml(
   node: Node,
   linkResolver?: (href: string) => LinkTarget | null
@@ -100,7 +298,6 @@ function inlineHtml(
       out += "<br/>";
       continue;
     }
-    // Preserve id attribute for fragment-based scroll targets.
     const elId = el.getAttribute("id");
     const idAttr = elId ? ` id="${escapeHtmlText(elId)}"` : "";
     const tag = INLINE_TAG_MAP[local];
@@ -115,7 +312,6 @@ function inlineHtml(
           continue;
         }
       }
-      // Unresolvable link — unwrap but keep id if present (footnote targets).
       if (elId && inner.trim()) {
         out += `<a${idAttr}>${inner}</a>`;
         continue;
@@ -129,10 +325,6 @@ function inlineHtml(
   return out;
 }
 
-/**
- * Collapse whitespace the way textOf does, but per <br>-separated segment so
- * line breaks survive. Empty segments (leading/trailing <br>) are dropped.
- */
 function collapseInlineHtml(html: string): string {
   return html
     .split(/<br\s*\/?>/)
@@ -141,7 +333,6 @@ function collapseInlineHtml(html: string): string {
     .join("<br/>");
 }
 
-/** Build a block from an element, attaching html only when markup remains. */
 function makeBlock(
   type: ContentBlock["type"],
   node: Element,
@@ -155,14 +346,15 @@ function makeBlock(
   const block: ContentBlock = { type, text };
   if (level !== undefined) block.level = level;
   if (html.includes("<")) block.html = html;
-  // Use the element's own id first, then an inherited ancestor fragment.
-  // (Inline descendant ids are preserved in the html string by inlineHtml.)
   const id = node.getAttribute("id") || fragment;
   if (id) block.fragment = id;
   return block;
 }
 
-/** Resolve a relative href against a base spine item path. */
+// ---------------------------------------------------------------------------
+// Path helpers
+// ---------------------------------------------------------------------------
+
 function resolveHref(base: string, rel: string): string {
   const baseDir = base.includes("/") ? base.substring(0, base.lastIndexOf("/") + 1) : "";
   const parts = (baseDir + rel).split("/");
@@ -174,32 +366,37 @@ function resolveHref(base: string, rel: string): string {
   return resolved.join("/");
 }
 
-/**
- * Build a case-insensitive map from lowercase path → actual path for every
- * file in the EPUB archive. Many EPUBs (especially those authored on
- * case-insensitive file systems) reference `Images/photo.jpg` when the ZIP
- * entry is `images/photo.jpg` — epubjs does exact matches, so lookups fail.
- */
-function buildFileMap(archive: any): Map<string, string> {
-  const map = new Map<string, string>();
-  const jszip = archive.zip;
-  if (!jszip) return map;
-  for (const key of Object.keys(jszip.files || {})) {
-    if (jszip.files[key].dir) continue;
-    // Normalize away leading/trailing slashes that JSZip may attach.
-    const clean = key.replace(/^\/+/, "").replace(/\/+$/, "");
-    if (clean) map.set(clean.toLowerCase(), clean);
-  }
-  return map;
+function stripFragment(href: string): string {
+  const i = href.indexOf("#");
+  return i >= 0 ? href.slice(0, i) : href;
 }
 
-/**
- * Walk the body of an XHTML document and emit structured blocks:
- * headings (h1–h6), paragraphs, and images. Nested block children of <p>
- * collapse into the paragraph text. <br> inside a paragraph becomes a line
- * break in html. <img> elements become image blocks when their src resolves
- * to a key in imageMap.
- */
+function pathExt(href: string): string {
+  const clean = stripFragment(href);
+  const base = clean.split("/").pop() || clean;
+  const dot = base.lastIndexOf(".");
+  if (dot < 0) return "";
+  return base.slice(dot + 1).toLowerCase();
+}
+
+function extFromCover(coverHref: string, mime: string | undefined): string {
+  const fromMime: Record<string, string> = {
+    "image/jpeg": "jpg",
+    "image/jpg": "jpg",
+    "image/png": "png",
+    "image/gif": "gif",
+    "image/webp": "webp",
+    "image/svg+xml": "svg",
+  };
+  if (mime && fromMime[mime]) return fromMime[mime];
+  const ext = pathExt(coverHref);
+  return ext || "img";
+}
+
+// ---------------------------------------------------------------------------
+// Block extraction from XHTML body
+// ---------------------------------------------------------------------------
+
 function extractBlocks(
   doc: Document,
   imageMap?: Map<string, string>,
@@ -232,13 +429,12 @@ function extractBlocks(
   }
 
   function walk(el: Element, ancestorFragment?: string): void {
-    // If this element has an id, it becomes the fragment for descendant blocks.
     const ownId = el.getAttribute("id") || undefined;
     const childFragment = ownId || ancestorFragment;
 
     for (let i = 0; i < el.childNodes.length; i++) {
       const child = el.childNodes[i];
-      if (child.nodeType !== 1) continue; // elements only
+      if (child.nodeType !== 1) continue;
       const node = child as Element;
       const local = node.localName || node.nodeName.toLowerCase();
       const nsLocal =
@@ -253,7 +449,6 @@ function extractBlocks(
       }
 
       if (nsLocal === "p" || nsLocal === "blockquote") {
-        // If the only meaningful content is an image, emit an image block.
         const imgs = node.getElementsByTagName("img");
         if (imgs.length > 0 && !textOf(node)) {
           const block = imageBlock(imgs[0], childFragment);
@@ -271,7 +466,6 @@ function extractBlocks(
         continue;
       }
 
-      // <figure> commonly wraps an <img>; grab the first img inside.
       if (nsLocal === "figure") {
         const imgs = node.getElementsByTagName("img");
         const block = imgs.length > 0 ? imageBlock(imgs[0], childFragment) : null;
@@ -279,8 +473,6 @@ function extractBlocks(
         continue;
       }
 
-      // Unrecognized block: recurse — catches sections, divs, lists.
-      // Lists become paragraphs per item to keep prose readable.
       if (nsLocal === "li") {
         const block = makeBlock("paragraph", node, undefined, linkResolver, childFragment);
         if (block) blocks.push(block);
@@ -295,19 +487,16 @@ function extractBlocks(
   return blocks;
 }
 
-function stripFragment(href: string): string {
-  const i = href.indexOf("#");
-  return i >= 0 ? href.slice(0, i) : href;
-}
+// ---------------------------------------------------------------------------
+// Link resolver for cross-chapter <a> links
+// ---------------------------------------------------------------------------
 
-/** Build a link resolver that maps EPUB hrefs to chapter targets. */
 function makeLinkResolver(
   docFullPath: string,
   spineToChapter: Map<string, number>,
   chapterIndex: number
 ): (href: string) => LinkTarget | null {
   return (href: string): LinkTarget | null => {
-    // Fragment-only link: same chapter.
     if (href.startsWith("#")) return { chapterIndex, fragment: href.slice(1) };
     const [path, fragment] = href.split("#");
     const resolved = resolveHref(docFullPath, path || "");
@@ -317,110 +506,21 @@ function makeLinkResolver(
   };
 }
 
-/** Flatten the EPUB nav (toc + subitems) into a single ordered list. */
-function flattenNav(toc: NavItem[]): { label: string; href: string }[] {
-  const out: { label: string; href: string }[] = [];
-  const visit = (items: NavItem[]) => {
-    for (const item of items) {
-      if (item.href && item.label) {
-        // EPUB nav labels often carry stray whitespace from the NCX/XHTML
-        // source; collapse it so the TOC sidebar renders clean titles.
-        const label = item.label.replace(/\s+/g, " ").trim();
-        if (label) out.push({ label, href: item.href });
-      }
-      if (item.subitems) visit(item.subitems);
-    }
-  };
-  visit(toc);
-  return out;
-}
+// ---------------------------------------------------------------------------
+// Navigation / TOC parsing
+// ---------------------------------------------------------------------------
 
-/**
- * Fallback nav loader for when epubjs's auto-loaded `book.navigation` ends
- * up empty (its `parse()` misidentifies the root of some XHTML nav docs).
- * Prefers the EPUB3 nav.xhtml (spine order), falls back to NCX.
- */
-async function loadNavManually(
-  book: Book,
-  nav: any
-): Promise<{ label: string; href: string }[]> {
-  const packaging: any = (book as any).packaging;
-
-  // EPUB3 nav.xhtml: parse it ourselves — epubjs's `parseNav` is unreliable
-  // (returns 0 items for valid nav docs). The nav.xhtml order matches the
-  // spine; the NCX can put backmatter entries in the wrong position.
-  if (packaging?.navPath) {
-    try {
-      const doc = (await book.load(packaging.navPath)) as unknown as Document;
-      // Find <nav epub:type="toc">, walk its <ol>/<li>/<a> tree.
-      const navEls = doc.getElementsByTagNameNS(
-        "http://www.w3.org/1999/xhtml",
-        "nav"
-      );
-      for (let i = 0; i < navEls.length; i++) {
-        const navEl = navEls[i];
-        const epubType = navEl.getAttributeNS(
-          "http://www.idpf.org/2007/ops",
-          "type"
-        );
-        if (!epubType || !epubType.split(/\s+/).includes("toc")) continue;
-        const entries = parseNavXhtml(navEl);
-        if (entries.length > 0) {
-          // Resolve relative hrefs against the nav.xhtml's directory.
-          // nav.xhtml is at something like `Text/toc.xhtml`; its links
-          // like `cover.xhtml` are relative to `Text/`.
-          const navDir = packaging.navPath.includes("/")
-            ? packaging.navPath.substring(
-                0,
-                packaging.navPath.lastIndexOf("/") + 1
-              )
-            : "";
-          return entries.map((e) => ({
-            label: e.label,
-            href: navDir + e.href,
-          }));
-        }
-      }
-    } catch {
-      // ponytail: fall through to NCX.
-    }
-  }
-
-  // EPUB2 NCX fallback.
-  if (packaging?.ncxPath) {
-    try {
-      const doc = (await book.load(packaging.ncxPath)) as unknown as Document;
-      if (typeof nav?.parseNcx === "function") {
-        const items = nav.parseNcx(doc);
-        if (items?.length) return flattenNav(items as NavItem[]);
-      }
-    } catch {
-      // ponytail: fall through to spine walk.
-    }
-  }
-
-  console.warn("[epub] nav parse failed for both nav.xhtml and NCX; falling back to spine walk");
-  return [];
-}
-
-/**
- * Walk a <nav epub:type="toc"> element and extract a flat list of
- * { label, href } entries from its <ol>/<li>/<a> tree.
- */
+/** Parse EPUB3 nav.xhtml's <nav epub:type="toc"> into a flat list. */
 function parseNavXhtml(navEl: Element): { label: string; href: string }[] {
   const out: { label: string; href: string }[] = [];
-  const XHTML_NS = "http://www.w3.org/1999/xhtml";
 
   function walkOl(ol: Element): void {
-    // epubjs uses a minimal DOM shim — `children` may not exist.
-    // Use `childNodes` and filter to element nodes (nodeType === 1).
     const nodes = ol.childNodes;
     if (!nodes) return;
     for (let i = 0; i < nodes.length; i++) {
       const li = nodes[i] as Element;
       if (!li || li.nodeType !== 1) continue;
       if (li.localName !== "li" && li.tagName !== "li") continue;
-      // Find the first <a> or <span> (epub:type="toc" allows span as label).
       const a =
         li.getElementsByTagNameNS(XHTML_NS, "a")[0] ||
         li.getElementsByTagNameNS(XHTML_NS, "span")[0];
@@ -429,7 +529,6 @@ function parseNavXhtml(navEl: Element): { label: string; href: string }[] {
         const label = (a.textContent || "").replace(/\s+/g, " ").trim();
         if (href && label) out.push({ label, href });
       }
-      // Recurse into nested <ol> (sub-items).
       const childOl = li.getElementsByTagNameNS(XHTML_NS, "ol")[0];
       if (childOl) walkOl(childOl);
     }
@@ -440,10 +539,83 @@ function parseNavXhtml(navEl: Element): { label: string; href: string }[] {
   return out;
 }
 
+/** Parse EPUB2 NCX document into a flat list of { label, href } entries. */
+function parseNcx(doc: Document): { label: string; href: string }[] {
+  const out: { label: string; href: string }[] = [];
+  const navPoints = doc.getElementsByTagName("navPoint");
+
+  function walk(points: HTMLCollectionOf<Element>): void {
+    for (let i = 0; i < points.length; i++) {
+      const np = points[i];
+      const content = np.getElementsByTagName("content")[0];
+      const navLabel = np.getElementsByTagName("navLabel")[0];
+      if (content && navLabel) {
+        const src = content.getAttribute("src") || "";
+        const label = (navLabel.textContent || "").replace(/\s+/g, " ").trim();
+        if (src && label) out.push({ label, href: src });
+      }
+      // Recurse into nested navPoints
+      const children = np.getElementsByTagName("navPoint");
+      if (children.length > 0) walk(children);
+    }
+  }
+
+  walk(navPoints);
+  return out;
+}
+
+/** Load and parse the EPUB navigation (EPUB3 nav.xhtml preferred, EPUB2 NCX fallback). */
+async function loadNav(epub: Epub): Promise<{ label: string; href: string }[]> {
+  const opfDir = epub.opfDir;
+
+  // EPUB3 nav.xhtml
+  if (epub.navPath) {
+    try {
+      const doc = await epub.load(epub.navPath);
+      const navEls = doc.getElementsByTagNameNS(XHTML_NS, "nav");
+      for (let i = 0; i < navEls.length; i++) {
+        const navEl = navEls[i];
+        const epubType = navEl.getAttributeNS(
+          "http://www.idpf.org/2007/ops",
+          "type"
+        );
+        if (!epubType || !epubType.split(/\s+/).includes("toc")) continue;
+        const entries = parseNavXhtml(navEl);
+        if (entries.length > 0) {
+          const navDir = epub.navPath.includes("/")
+            ? epub.navPath.substring(0, epub.navPath.lastIndexOf("/") + 1)
+            : "";
+          return entries.map((e) => ({
+            label: e.label,
+            href: navDir + e.href,
+          }));
+        }
+      }
+    } catch {
+      // ponytail: fall through to NCX
+    }
+  }
+
+  // EPUB2 NCX
+  if (epub.ncxPath) {
+    try {
+      const doc = await epub.load(epub.ncxPath);
+      const items = parseNcx(doc);
+      if (items.length > 0) return items;
+    } catch {
+      // ponytail: fall through
+    }
+  }
+
+  console.warn("[epub] nav parse failed for both nav.xhtml and NCX; falling back to spine walk");
+  return [];
+}
+
+// ---------------------------------------------------------------------------
+// Chapter title fallback
+// ---------------------------------------------------------------------------
+
 function chapterTitle(doc: Document, fallback: string): string {
-  // Nav-less fallback: read the title from the document itself. EPUB nav is
-  // the preferred source — many books stamp boilerplate in <h1>/<title>
-  // (e.g. a Project Gutenberg header repeated on every section).
   const h1 =
     doc.getElementsByTagName("h1")[0] || doc.getElementsByTagName("h2")[0];
   if (h1) {
@@ -458,57 +630,21 @@ function chapterTitle(doc: Document, fallback: string): string {
   return fallback;
 }
 
-function metadataOf(book: Book): { title: string; author: string } {
-  const meta = (book as any).packaging?.metadata || {};
-  const title: string =
-    meta.title || (meta.dcTitle && meta.dcTitle[""]) || "Untitled";
-  const author: string = meta.creator || "";
-  return { title, author };
-}
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
 
-function extFromCover(coverHref: string, mime: string | undefined): string {
-  const fromMime: Record<string, string> = {
-    "image/jpeg": "jpg",
-    "image/jpg": "jpg",
-    "image/png": "png",
-    "image/gif": "gif",
-    "image/webp": "webp",
-    "image/svg+xml": "svg",
-  };
-  if (mime && fromMime[mime]) return fromMime[mime];
-  const ext = pathExt(coverHref);
-  return ext || "img";
-}
-
-function pathExt(href: string): string {
-  const clean = stripFragment(href);
-  const base = clean.split("/").pop() || clean;
-  const dot = base.lastIndexOf(".");
-  if (dot < 0) return "";
-  return base.slice(dot + 1).toLowerCase();
-}
-
-async function openEpub(filePath: string): Promise<Book> {
-  const data = await fs.promises.readFile(filePath);
-  const book = new Book(data as any, { openAs: "binary" } as any);
-  await book.opened;
-  // `ready` resolves once spine/metadata/navigation are all loaded.
-  await book.ready;
-  return book;
-}
-
-/** Pull cover image bytes out of an already-opened epubjs Book. */
-async function coverOf(book: Book): Promise<EpubCover | null> {
-  const coverHref = (book as any).cover as string | undefined;
-  if (!coverHref || !book.archive) return null;
+/** Pull cover image bytes out of an already-opened Epub. */
+async function coverOf(epub: Epub): Promise<EpubCover | null> {
+  const coverHref = epub.coverHref;
+  if (!coverHref) return null;
   try {
-    const blob: Blob | undefined = await book.archive.getBlob(coverHref);
+    const blob = await epub.getBlob(epub.resolve(coverHref));
     if (!blob) return null;
     const data = Buffer.from(await blob.arrayBuffer());
     if (data.length === 0) return null;
     return { data, ext: extFromCover(coverHref, blob.type) };
   } catch {
-    // ponytail: missing/unreadable cover is fine — library shows a placeholder.
     return null;
   }
 }
@@ -517,25 +653,18 @@ async function coverOf(book: Book): Promise<EpubCover | null> {
  * Lightweight import-time read: title, author, cover. Skips chapter parsing.
  */
 export async function readEpubMeta(filePath: string): Promise<EpubMeta> {
-  const book = await openEpub(filePath);
+  const epub = await Epub.open(filePath);
   try {
-    const { title, author } = metadataOf(book);
-    const cover = await coverOf(book);
+    const { title, creator: author } = epub.metadata;
+    const cover = await coverOf(epub);
     return { title, author, cover };
   } finally {
-    book.destroy();
+    epub.destroy();
   }
 }
 
 /**
  * Parse an EPUB file from disk into structured chapters.
- *
- * Flow: read file → epubjs opens the zip + OPF → read spine in order →
- * load each section's XHTML from the archive → DOM-walk into blocks.
- *
- * When `bookId` is provided, images referenced in the XHTML are extracted
- * from the archive and saved to `<userData>/covers/<bookId>/images/` so the
- * renderer can load them via the `yumi://asset/` protocol.
  *
  * @param filePath absolute path to a .epub
  * @param bookId database id, used as the image storage key
@@ -544,136 +673,141 @@ export async function parseEpub(
   filePath: string,
   bookId?: number
 ): Promise<ParsedEpub> {
-  const book = await openEpub(filePath);
+  const epub = await Epub.open(filePath);
   try {
-  const { title, author } = metadataOf(book);
+    const { title, creator: author } = epub.metadata;
 
-  // The EPUB nav is the source of truth for chapter boundaries — many books
-  // split a single chapter across several XHTML files (text + image + text)
-  // to keep file sizes small, so walking the spine (file-level) inflates the
-  // chapter count and produces duplicate entries. The nav (toc.ncx /
-  // nav.xhtml) lists each logical chapter once.
-  //
-  // epubjs's `book.loaded.navigation` is unreliable: it returns an empty toc
-  // for EPUBs whose nav.xhtml isn't recognised as HTML, and it returns the
-  // NCX order for EPUB3 books that have both NCX and nav.xhtml (NCX order
-  // can diverge from the spine — this book's NCX lists "Color Illustrations"
-  // after "Epilogue", but the pages sit right after the cover). Always
-  // manually parse, preferring the EPUB3 nav.xhtml over NCX.
-  const nav = (await book.loaded.navigation) as any;
-  const manualNav = await loadNavManually(book, nav);
-  let flatNav: { label: string; href: string }[] =
-    manualNav.length > 0
-      ? manualNav
-      : nav?.toc?.length
-        ? flattenNav(nav.toc as NavItem[])
-        : [];
+    // Parse the navigation (TOC) to get chapter boundaries.
+    const flatNav = await loadNav(epub);
 
-  // Collect linear spine sections in order, indexed by fragment-stripped
-  // href so a nav entry like `section-0009.html#auto_bookmark_toc_9` finds
-  // the matching file.
-  interface SpineRef {
-    index: number;
-    href: string;
-  }
-  const spineItems: SpineRef[] = [];
-  const spineByHref = new Map<string, SpineRef>();
-  let spineIndex = 0;
-  (book.spine as any).each((section: any) => {
-    if (section.linear === false) return;
-    const item: SpineRef = { index: spineIndex++, href: section.href };
-    spineItems.push(item);
-    const base = stripFragment(section.href);
-    if (!spineByHref.has(base)) spineByHref.set(base, item);
-  });
+    // Build spine index for nav→spine lookups and link resolution.
+    interface SpineRef {
+      index: number;
+      href: string;
+    }
+    const spineItems: SpineRef[] = [];
+    const spineByHref = new Map<string, SpineRef>();
+    let spineIdx = 0;
+    for (let i = 0; i < epub.spine.length; i++) {
+      const s = epub.spine[i];
+      if (s.linear === "no") continue;
+      const ref: SpineRef = { index: spineIdx++, href: s.href };
+      spineItems.push(ref);
+      const base = stripFragment(s.href);
+      if (!spineByHref.has(base)) spineByHref.set(base, ref);
+    }
 
-  // Case-insensitive file map: many EPUBs (especially those authored on
-  // Windows/macOS) reference files with different casing than the ZIP.
-  const fileMap = bookId !== undefined ? buildFileMap(book.archive) : null;
+    // Image extraction setup
+    const imageMap = new Map<string, string>();
+    const imageDir =
+      bookId !== undefined
+        ? path.join(getCoversDir(), String(bookId), "images")
+        : null;
+    if (imageDir) fs.mkdirSync(imageDir, { recursive: true });
 
-  /** Like book.archive.getBlob, but falls back to case-insensitive lookup. */
-  async function getImageBlob(href: string): Promise<Blob | null> {
-    // epubjs getBlob does url.substr(1) internally, so it needs a leading /.
-    const path = href.startsWith("/") ? href : `/${href}`;
-    const direct = await book.archive.getBlob(path);
-    if (direct) return direct;
-    if (!fileMap) return null;
-    const actual = fileMap.get(href.toLowerCase());
-    if (!actual || actual === href) return null;
-    const actualPath = actual.startsWith("/") ? actual : `/${actual}`;
-    return (await book.archive.getBlob(actualPath)) ?? null;
-  }
+    /** Extract image blob from archive (href is already resolved relative to the XHTML doc). */
+    function getImageBlob(href: string): Promise<Blob | null> {
+      return epub.getBlob("/" + href);
+    }
 
-  // Book-wide image extraction state — shared across all chapters so
-  // an image referenced from multiple chapters is only extracted once.
-  const imageMap = new Map<string, string>();
-  const imageDir =
-    bookId !== undefined
-      ? path.join(getCoversDir(), String(bookId), "images")
-      : null;
-  if (imageDir) fs.mkdirSync(imageDir, { recursive: true });
+    const spineToChapter = new Map<string, number>();
+    const chapters: ParsedChapter[] = [];
+    let coveredUpTo = 0;
 
-  // Map each spine href (no fragment) to its chapter index so <a> links
-  // can be resolved during block extraction.
-  const spineToChapter = new Map<string, number>();
+    if (flatNav.length > 0) {
+      for (let i = 0; i < flatNav.length; i++) {
+        const entry = flatNav[i];
+        const startHref = stripFragment(entry.href);
+        const startItem = spineByHref.get(startHref);
+        if (!startItem) continue;
+        if (startItem.index < coveredUpTo) continue;
 
-  const chapters: ParsedChapter[] = [];
-  // Spine indices already assigned to a chapter. When a later nav entry
-  // points backward (e.g. TOC lists "Color Illustrations" after
-  // "Epilogue" but the color pages sit right after the cover), skip it
-  // — its content was already covered by an earlier chapter.
-  let coveredUpTo = 0;
-  if (flatNav.length > 0) {
-    for (let i = 0; i < flatNav.length; i++) {
-      const entry = flatNav[i];
-      const startHref = stripFragment(entry.href);
-      const startItem = spineByHref.get(startHref);
-      if (!startItem) continue; // nav points outside the spine — skip
-
-      // Nav entry points to spine content already covered by a previous
-      // chapter (e.g. backmatter TOC reference to front-matter images).
-      if (startItem.index < coveredUpTo) continue;
-
-      // A chapter spans every spine section from its start up to (but not
-      // including) the next *forward-pointing* nav entry's start. Skip
-      // over entries that point backward (their content is already covered
-      // by an earlier chapter). The last chapter runs to end of spine.
-      let nextStartIndex = spineItems.length;
-      for (let j = i + 1; j < flatNav.length; j++) {
-        const nextHref = stripFragment(flatNav[j].href);
-        const nextItem = spineByHref.get(nextHref);
-        if (nextItem && nextItem.index > startItem.index) {
-          nextStartIndex = nextItem.index;
-          break;
+        let nextStartIndex = spineItems.length;
+        for (let j = i + 1; j < flatNav.length; j++) {
+          const nextHref = stripFragment(flatNav[j].href);
+          const nextItem = spineByHref.get(nextHref);
+          if (nextItem && nextItem.index > startItem.index) {
+            nextStartIndex = nextItem.index;
+            break;
+          }
         }
-      }
 
-      // First pass: register spine→chapter mappings for ALL items in this
-      // nav chapter so cross-spine-item links resolve correctly.
-      for (const item of spineItems) {
-        if (item.index < startItem.index) continue;
-        if (item.index >= nextStartIndex) break;
-        const spineHref = book.resolve(item.href).replace(/^\/+/, "");
-        spineToChapter.set(stripFragment(spineHref), chapters.length);
-      }
+        // Register spine→chapter mappings for cross-spine-item links
+        for (const item of spineItems) {
+          if (item.index < startItem.index) continue;
+          if (item.index >= nextStartIndex) break;
+          const spineHref = epub.resolve(item.href).replace(/^\/+/, "");
+          spineToChapter.set(stripFragment(spineHref), chapters.length);
+        }
 
-      // Second pass: extract blocks.
-      const allBlocks: ContentBlock[] = [];
-      for (const item of spineItems) {
-        if (item.index < startItem.index) continue;
-        if (item.index >= nextStartIndex) break;
+        // Extract blocks
+        const allBlocks: ContentBlock[] = [];
+        for (const item of spineItems) {
+          if (item.index < startItem.index) continue;
+          if (item.index >= nextStartIndex) break;
+          let doc: Document;
+          try {
+            doc = await epub.load(item.href);
+          } catch {
+            continue;
+          }
+
+          const docFullPath = epub.resolve(item.href).replace(/^\/+/, "");
+
+          // Extract images from this spine doc
+          if (imageDir) {
+            const imgs = doc.getElementsByTagName("img");
+            for (let j = 0; j < imgs.length; j++) {
+              const src = imgs[j].getAttribute("src");
+              if (!src) continue;
+              const resolved = resolveHref(docFullPath, src);
+              if (imageMap.has(resolved)) continue;
+              if (imageMap.size >= MAX_EXTRACTED_IMAGES) break;
+              try {
+                const blob = await getImageBlob(resolved);
+                if (blob && blob.size > 0 && blob.size <= MAX_IMAGE_SIZE_BYTES) {
+                  const ext = pathExt(resolved) || "jpg";
+                  const filename = `${imageMap.size}.${ext}`;
+                  const dest = path.join(imageDir, filename);
+                  await fs.promises.writeFile(
+                    dest,
+                    Buffer.from(await blob.arrayBuffer())
+                  );
+                  imageMap.set(resolved, `covers/${bookId}/images/${filename}`);
+                }
+              } catch {
+                // skip unreadable images
+              }
+            }
+          }
+
+          const resolveLink = makeLinkResolver(docFullPath, spineToChapter, chapters.length);
+          allBlocks.push(...extractBlocks(doc, imageMap, docFullPath, resolveLink));
+        }
+
+        if (allBlocks.length === 0) continue;
+        chapters.push({
+          index: chapters.length,
+          title: entry.label,
+          rawText: JSON.stringify(allBlocks),
+        });
+        coveredUpTo = Math.max(coveredUpTo, nextStartIndex);
+      }
+    } else {
+      // Nav-less fallback: iterate spine items
+      for (let i = 0; i < spineItems.length; i++) {
+        const item = spineItems[i];
         let doc: Document;
         try {
-          // book.load routes through archive.request (no XHR) since archived=true.
-          doc = (await book.load(item.href)) as unknown as Document;
+          doc = await epub.load(item.href);
         } catch {
-          // ponytail: skip unreadable spine items rather than aborting the book.
           continue;
         }
 
-        const docFullPath = book.resolve(item.href).replace(/^\/+/, "");
+        const spineHref = epub.resolve(item.href).replace(/^\/+/, "");
+        spineToChapter.set(stripFragment(spineHref), chapters.length);
 
-        // Extract images from this spine doc before DOM-walking.
+        const docFullPath = epub.resolve(item.href).replace(/^\/+/, "");
         if (imageDir) {
           const imgs = doc.getElementsByTagName("img");
           for (let j = 0; j < imgs.length; j++) {
@@ -692,92 +826,35 @@ export async function parseEpub(
                   dest,
                   Buffer.from(await blob.arrayBuffer())
                 );
-                imageMap.set(
-                  resolved,
-                  `covers/${bookId}/images/${filename}`
-                );
+                imageMap.set(resolved, `covers/${bookId}/images/${filename}`);
               }
             } catch {
-              // ponytail: skip unreadable images; the book still renders.
+              // skip unreadable images
             }
           }
         }
 
         const resolveLink = makeLinkResolver(docFullPath, spineToChapter, chapters.length);
-        allBlocks.push(...extractBlocks(doc, imageMap, docFullPath, resolveLink));
+        const blocks = extractBlocks(doc, imageMap, docFullPath, resolveLink);
+        if (blocks.length === 0) continue;
+        chapters.push({
+          index: chapters.length,
+          title: chapterTitle(doc, `Chapter ${chapters.length + 1}`),
+          rawText: JSON.stringify(blocks),
+        });
       }
-      if (allBlocks.length === 0) continue;
-      chapters.push({
-        index: chapters.length,
-        title: entry.label,
-        rawText: JSON.stringify(allBlocks),
-      });
-      coveredUpTo = Math.max(coveredUpTo, nextStartIndex);
     }
-  } else {
-    // ponytail: nav-less fallback (rare — books without toc.ncx/nav.xhtml);
-    // file-level spine iteration over-counts chapters the same way as the
-    // buggy version, but the renderer still renders *something*.
-    for (let i = 0; i < spineItems.length; i++) {
-      const item = spineItems[i];
-      let doc: Document;
-      try {
-        doc = (await book.load(item.href)) as unknown as Document;
-      } catch {
-        continue;
-      }
-      const spineHref = book.resolve(item.href).replace(/^\/+/, "");
-      spineToChapter.set(stripFragment(spineHref), chapters.length);
 
-      const docFullPath = book.resolve(item.href).replace(/^\/+/, "");
-      if (imageDir) {
-        const imgs = doc.getElementsByTagName("img");
-        for (let j = 0; j < imgs.length; j++) {
-          const src = imgs[j].getAttribute("src");
-          if (!src) continue;
-          const resolved = resolveHref(docFullPath, src);
-          if (imageMap.has(resolved)) continue;
-          if (imageMap.size >= MAX_EXTRACTED_IMAGES) break;
-          try {
-            const blob = await getImageBlob(resolved);
-            if (blob && blob.size > 0 && blob.size <= MAX_IMAGE_SIZE_BYTES) {
-              const ext = pathExt(resolved) || "jpg";
-              const filename = `${imageMap.size}.${ext}`;
-              const dest = path.join(imageDir, filename);
-              await fs.promises.writeFile(
-                dest,
-                Buffer.from(await blob.arrayBuffer())
-              );
-              imageMap.set(
-                resolved,
-                `covers/${bookId}/images/${filename}`
-              );
-            }
-          } catch {
-            // ponytail: skip unreadable images.
-          }
-        }
-      }
-
-      const resolveLink = makeLinkResolver(docFullPath, spineToChapter, chapters.length);
-      const blocks = extractBlocks(doc, imageMap, docFullPath, resolveLink);
-      if (blocks.length === 0) continue;
-      chapters.push({
-        index: chapters.length,
-        title: chapterTitle(doc, `Chapter ${chapters.length + 1}`),
-        rawText: JSON.stringify(blocks),
-      });
-    }
-  }
-
-  return { title, author, chapters };
+    return { title, author, chapters };
   } finally {
-    book.destroy();
+    epub.destroy();
   }
 }
 
-// Self-check: `tsx src/main/epub.ts <file.epub>` prints a one-line summary.
-// ponytail: tiny assertion run, no test framework.
+// ---------------------------------------------------------------------------
+// Self-check
+// ---------------------------------------------------------------------------
+
 async function main(): Promise<void> {
   const file = process.argv[2];
   if (!file) {
