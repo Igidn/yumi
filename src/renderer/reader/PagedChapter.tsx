@@ -341,7 +341,7 @@ export function PagedChapter({
     const target = Math.floor(el.offsetLeft / (geom.stride * geom.perSpread));
     setSpread(Math.min(Math.max(0, target), geom.spreads - 1));
     el.classList.add("reader-flash");
-    const timer = setTimeout(() => el.classList.remove("reader-flash"), 1700);
+    const timer = setTimeout(() => el.classList.remove("reader-flash"), 4000);
     return () => clearTimeout(timer);
   }, [jump, geom]);
 
@@ -364,7 +364,7 @@ export function PagedChapter({
     const target = Math.floor(xOffset / (geom.stride * geom.perSpread));
     setSpread(Math.min(Math.max(0, target), geom.spreads - 1));
     el.classList.add("reader-flash");
-    const timer = setTimeout(() => el.classList.remove("reader-flash"), 1700);
+    const timer = setTimeout(() => el.classList.remove("reader-flash"), 4000);
     return () => clearTimeout(timer);
   }, [geom, scrollToFragment]);
 
