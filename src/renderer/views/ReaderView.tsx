@@ -163,7 +163,7 @@ export function ReaderView({ bookId }: { bookId: number }) {
     (targetChapter: number, fragment: string | null) => {
       const fraction = pageInfo?.fraction ?? 0;
       setLinkHistory((prev) => [...prev, { chapterPos, fraction }]);
-      setBackButton({ side: targetChapter < chapterPos ? "left" : "right" });
+      setBackButton({ side: targetChapter < chapterPos ? "right" : "left" });
       if (targetChapter === chapterPos) {
         // Same-chapter link: scroll to fragment.
         setScrollToFragment(fragment);
