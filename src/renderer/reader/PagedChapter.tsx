@@ -46,12 +46,79 @@ export interface SpreadInfo {
   totalCols: number;
   /** 0–1 position inside the chapter. */
   fraction: number;
+  /** Layout dims — enough to remeasure other chapters for book-wide page #s. */
+  contentWidth: number;
+  contentHeight: number;
+  colWidth: number;
+  colGap: number;
 }
 
-const TWO_COL_MIN_WIDTH = 720;
-const COL_GAP = 72;
-const MAX_COL_WIDTH = 600;
-const MAX_SINGLE_COL_WIDTH = 680;
+/** Offscreen CSS-column count for one chapter under a known layout. */
+export function countChapterCols(
+  chapter: ReaderChapter,
+  layout: Pick<
+    SpreadInfo,
+    "contentWidth" | "contentHeight" | "colWidth" | "colGap"
+  >,
+  fontSize: number,
+  lineHeight: number
+): number {
+  const host = document.createElement("div");
+  host.style.cssText =
+    "position:absolute;left:-99999px;top:0;visibility:hidden;pointer-events:none";
+  const content = document.createElement("div");
+  content.className = "reader-content";
+  content.lang = "en";
+  Object.assign(content.style, {
+    width: `${layout.contentWidth}px`,
+    height: `${layout.contentHeight}px`,
+    columnWidth: `${layout.colWidth}px`,
+    columnGap: `${layout.colGap}px`,
+    columnFill: "auto",
+    fontSize: `${fontSize}px`,
+    lineHeight: String(lineHeight),
+  });
+
+  const spacer = document.createElement("div");
+  spacer.style.height = "48px";
+  content.appendChild(spacer);
+
+  chapter.blocks.forEach((block, i) => {
+    if (block.type === "heading") {
+      const level = Math.min(6, Math.max(1, block.level ?? 1));
+      const el = document.createElement(`h${level}`);
+      el.className = headingClass(level, i === 0);
+      if (block.html) el.innerHTML = block.html;
+      else el.textContent = block.text;
+      content.appendChild(el);
+      return;
+    }
+    const p = document.createElement("p");
+    if (i > 0 && chapter.blocks[i - 1].type === "paragraph") {
+      p.className = "reader-indent";
+    }
+    if (block.html) p.innerHTML = block.html;
+    else p.textContent = block.text;
+    content.appendChild(p);
+  });
+
+  host.appendChild(content);
+  document.body.appendChild(host);
+  const stride = layout.colWidth + layout.colGap;
+  const totalCols = Math.max(
+    1,
+    Math.round((content.scrollWidth + layout.colGap) / stride)
+  );
+  host.remove();
+  return totalCols;
+}
+
+// Layout defaults mirrored from Readest (foliate paginator + DEFAULT_BOOK_LAYOUT):
+// maxInlineSize 720, maxColumnCount 2, gapPercent 5, compact side margins 16.
+const MAX_INLINE_SIZE = 720;
+const MAX_COLUMN_COUNT = 2;
+const GAP_PERCENT = 0.05;
+const MARGIN_X = 16;
 const CONTENT_V_INSET = 20; // top + bottom breathing room inside the viewport
 
 function sameGeometry(a: Geometry | null, b: Geometry): Geometry {
@@ -145,12 +212,22 @@ export function PagedChapter({
     const availH = viewport.clientHeight;
     if (availW === 0 || availH === 0) return;
 
-    const twoCol = availW >= TWO_COL_MIN_WIDTH;
-    const colGap = twoCol ? COL_GAP : 0;
-    const colWidth = twoCol
-      ? Math.floor(Math.min((availW - COL_GAP) / 2, MAX_COL_WIDTH))
-      : Math.min(availW - 48, MAX_SINGLE_COL_WIDTH);
-    const contentWidth = twoCol ? colWidth * 2 + colGap : colWidth;
+    // Column count from host width (same formula as foliate/readest).
+    const perSpread = Math.min(
+      MAX_COLUMN_COUNT,
+      Math.max(1, Math.ceil(Math.floor(availW) / Math.floor(MAX_INLINE_SIZE)))
+    );
+    // Keep at least MARGIN_X on each side so text never kisses the window edge.
+    const innerW = Math.max(0, availW - MARGIN_X * 2);
+    // gap = a/(1-a) * size keeps outer padding and column gap visually even.
+    const colGap =
+      perSpread > 1
+        ? Math.round((-GAP_PERCENT / (GAP_PERCENT - 1)) * innerW)
+        : 0;
+    const colWidth = Math.floor(
+      Math.min((innerW - colGap * (perSpread - 1)) / perSpread, MAX_INLINE_SIZE)
+    );
+    const contentWidth = colWidth * perSpread + colGap * (perSpread - 1);
     const contentHeight = availH - CONTENT_V_INSET * 2;
 
     // Apply before reading scrollWidth; React writes the same values back
@@ -165,7 +242,7 @@ export function PagedChapter({
       1,
       Math.round((content.scrollWidth + colGap) / stride)
     );
-    const spreads = Math.max(1, Math.ceil(totalCols / (twoCol ? 2 : 1)));
+    const spreads = Math.max(1, Math.ceil(totalCols / perSpread));
 
     setGeom((prev) =>
       sameGeometry(prev, {
@@ -174,7 +251,7 @@ export function PagedChapter({
         colWidth,
         colGap,
         stride,
-        perSpread: twoCol ? 2 : 1,
+        perSpread,
         spreads,
         totalCols,
         margin: Math.max(0, (availW - contentWidth) / 2),
@@ -211,6 +288,10 @@ export function PagedChapter({
       perSpread: geom.perSpread,
       totalCols: geom.totalCols,
       fraction,
+      contentWidth: geom.contentWidth,
+      contentHeight: geom.contentHeight,
+      colWidth: geom.colWidth,
+      colGap: geom.colGap,
     });
   }, [spread, geom]); // eslint-disable-line react-hooks/exhaustive-deps
 

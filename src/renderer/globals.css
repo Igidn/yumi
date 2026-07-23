@@ -82,12 +82,20 @@
   -webkit-app-region: no-drag;
 }
 
-/* Reading surface typography (SPEC §2). Justified, hyphenated book prose. */
+/* Reading surface typography (SPEC §2). Justified, hyphenated book prose.
+   Wrap/hyphen limits match Readest's getParagraphLayoutStyles. */
 .reader-content {
   font-family: var(--font-reading);
   text-align: justify;
   hyphens: auto;
+  -webkit-hyphens: auto;
+  -webkit-hyphenate-limit-before: 3;
+  -webkit-hyphenate-limit-after: 2;
+  -webkit-hyphenate-limit-lines: 2;
   overflow-wrap: break-word;
+  hanging-punctuation: allow-end last;
+  orphans: 2;
+  widows: 2;
   -webkit-font-smoothing: antialiased;
 }
 

@@ -3,6 +3,7 @@ import { List, Search } from "lucide-react";
 import type { ReaderPayload } from "../../shared/types";
 import {
   PagedChapter,
+  countChapterCols,
   type PageJump,
   type Reposition,
   type SpreadInfo,
@@ -36,6 +37,8 @@ export function ReaderView({ bookId }: { bookId: number }) {
   /** Fraction to land at when the chapter changes (0 start, 1 end, resume). */
   const [landingFraction, setLandingFraction] = useState(0);
   const [pageInfo, setPageInfo] = useState<SpreadInfo | null>(null);
+  /** Column counts per chapter under the current layout; null until measured. */
+  const [colsByChapter, setColsByChapter] = useState<number[] | null>(null);
   const [panel, setPanel] = useState<Panel>(null);
   const [appearanceOpen, setAppearanceOpen] = useState(false);
   const [jump, setJump] = useState<PageJump | null>(null);
@@ -126,6 +129,7 @@ export function ReaderView({ bookId }: { bookId: number }) {
       flushProgress();
       setJump(null);
       setReposition(null);
+      setPageInfo(null);
       setLandingFraction(fraction);
       setChapterPos(pos);
     },
@@ -203,6 +207,31 @@ export function ReaderView({ bookId }: { bookId: number }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [chapterPos, goToChapter]);
 
+  // Book-wide page offsets: remeasure every chapter when layout/typography changes.
+  // ponytail: sync full-book measure; chunk if 200+ chapter books jank on resize.
+  useEffect(() => {
+    if (!payload || !pageInfo) return;
+    const layout = {
+      contentWidth: pageInfo.contentWidth,
+      contentHeight: pageInfo.contentHeight,
+      colWidth: pageInfo.colWidth,
+      colGap: pageInfo.colGap,
+    };
+    setColsByChapter(
+      payload.chapters.map((ch) =>
+        countChapterCols(ch, layout, settings.fontSize, settings.lineHeight)
+      )
+    );
+  }, [
+    payload,
+    pageInfo?.contentWidth,
+    pageInfo?.contentHeight,
+    pageInfo?.colWidth,
+    pageInfo?.colGap,
+    settings.fontSize,
+    settings.lineHeight,
+  ]);
+
   // ---- render ------------------------------------------------------------
 
   const theme = settings.theme;
@@ -229,18 +258,26 @@ export function ReaderView({ bookId }: { bookId: number }) {
   const { book, chapters } = payload;
   const chapter = chapters[chapterPos] ?? null;
 
-  // Apple Books shows the rightmost visible page; chapter-local numbering
-  // for now — book-wide page numbers need whole-book pagination (later).
-  const pageLabel = pageInfo
-    ? Math.min((pageInfo.spread + 1) * pageInfo.perSpread, pageInfo.totalCols)
-    : null;
+  // Apple Books shows the rightmost visible page of the current spread,
+  // numbered across the whole book (not restarting per chapter).
+  const pageLabel = (() => {
+    if (!pageInfo) return null;
+    const local = Math.min(
+      (pageInfo.spread + 1) * pageInfo.perSpread,
+      pageInfo.totalCols
+    );
+    if (!colsByChapter) return chapterPos === 0 ? local : null;
+    let prefix = 0;
+    for (let i = 0; i < chapterPos; i++) prefix += colsByChapter[i] ?? 0;
+    return prefix + local;
+  })();
 
   return (
     <div
       className={`reader-${theme} flex h-screen flex-col overflow-hidden bg-reader font-ui text-reader`}
     >
       {/* Chrome header — drag region for the frameless window */}
-      <header className="app-drag relative z-10 flex h-[46px] shrink-0 items-center justify-between border-b border-reader-edge/50 pl-[86px] pr-3">
+      <header className="app-drag relative z-10 flex h-[46px] shrink-0 items-center justify-between pl-[86px] pr-3">
         <div className="app-no-drag flex items-center gap-1">
           <button
             onClick={() => {
