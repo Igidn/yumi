@@ -40,6 +40,9 @@ export interface ContentBlock {
   html?: string;
   /** Image blocks only: path relative to userData root, served via yumi://asset/ */
   src?: string;
+  /** Natural image dimensions (pixels), so the browser can reserve space before load. */
+  imgWidth?: number;
+  imgHeight?: number;
   /** Fragment anchor ID from the source XHTML — used for hyperlink scroll targets. */
   fragment?: string;
 }

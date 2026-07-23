@@ -90,12 +90,19 @@ export function countChapterCols(
       img.src = `yumi://asset/${block.src}`;
       img.style.width = `${layout.colWidth}px`;
       img.style.height = "auto";
+      // Set natural dimensions so the browser reserves the correct aspect
+      // ratio before the image loads — prevents column-count undercount.
+      if (block.imgWidth && block.imgHeight) {
+        img.width = block.imgWidth;
+        img.height = block.imgHeight;
+      } else {
+        // ponytail: unknown dimensions — use a conservative placeholder so
+        // column counting isn't wildly off.
+        const ph = document.createElement("div");
+        ph.style.height = `${layout.colWidth * 0.75}px`;
+        content.appendChild(ph);
+      }
       content.appendChild(img);
-      // ponytail: images loaded async won't have height yet; use a
-      // conservative placeholder so column counting isn't wildly off.
-      const ph = document.createElement("div");
-      ph.style.height = `${layout.colWidth * 0.75}px`;
-      content.appendChild(ph);
       return;
     }
     if (block.type === "heading") {
@@ -485,6 +492,8 @@ export function PagedChapter({
                     data-b={i}
                     src={src}
                     alt={block.text || ""}
+                    width={block.imgWidth}
+                    height={block.imgHeight}
                     className="reader-image cursor-zoom-in"
                     onClick={() => setLightboxSrc(src)}
                   />

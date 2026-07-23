@@ -379,6 +379,81 @@ function pathExt(href: string): string {
   return base.slice(dot + 1).toLowerCase();
 }
 
+/** Read {width, height} from an image file on disk. Handles PNG, JPEG, GIF,
+ *  WebP, and BMP — the formats found in EPUBs. Returns null on any failure
+ *  so callers silently fall back to no-dimension behaviour. */
+function getImageDimensions(filePath: string): { width: number; height: number } | null {
+  try {
+    const fd = fs.openSync(filePath, "r");
+    const header = Buffer.alloc(32);
+    const bytesRead = fs.readSync(fd, header, 0, 32, 0);
+    fs.closeSync(fd);
+    if (bytesRead < 24) return null;
+
+    // PNG: 89 50 4E 47 – IHDR at offset 16 gives width (4B BE) + height (4B BE)
+    if (header[0] === 0x89 && header[1] === 0x50 && header[2] === 0x4E && header[3] === 0x47) {
+      return { width: header.readUInt32BE(16), height: header.readUInt32BE(20) };
+    }
+
+    // GIF: 47 49 46 – width/height are little-endian uint16 at offsets 6,8
+    if (header[0] === 0x47 && header[1] === 0x49 && header[2] === 0x46) {
+      return { width: header.readUInt16LE(6), height: header.readUInt16LE(8) };
+    }
+
+    // BMP: 42 4D – width/height are signed int32 LE at offsets 18,22
+    if (header[0] === 0x42 && header[1] === 0x4D) {
+      const w = header.readInt32LE(18);
+      const h = header.readInt32LE(22);
+      return { width: Math.abs(w), height: Math.abs(h) };
+    }
+
+    // JPEG: FF D8 – scan for a SOF marker, width/height are uint16 BE inside it
+    if (header[0] === 0xFF && header[1] === 0xD8) {
+      // Read up to 64 KB to cover EXIF + header cruft before the SOF marker.
+      const buf = fs.readFileSync(filePath, { flag: "r" });
+      let pos = 2;
+      while (pos < buf.length - 8) {
+        if (buf[pos] !== 0xFF) return null;
+        const marker = buf[pos + 1];
+        // SOF markers: C0 C1 C2 C3 C9 CA CB
+        if ((marker >= 0xC0 && marker <= 0xC3) || (marker >= 0xC9 && marker <= 0xCB)) {
+          return { width: buf.readUInt16BE(pos + 7), height: buf.readUInt16BE(pos + 5) };
+        }
+        pos += 2 + buf.readUInt16BE(pos + 2);
+      }
+      return null;
+    }
+
+    // WebP: RIFF .... WEBP
+    if (
+      header[0] === 0x52 && header[1] === 0x49 && header[2] === 0x46 && header[3] === 0x46 &&
+      header[8] === 0x57 && header[9] === 0x45 && header[10] === 0x42 && header[11] === 0x50
+    ) {
+      const buf = fs.readFileSync(filePath, { flag: "r" });
+      // VP8  (lossy): 4 bytes "VP8 " at offset 12 → 10-byte chunk, w/h at +14,+16 masked to 14 bits
+      if (buf[12] === 0x56 && buf[13] === 0x50 && buf[14] === 0x38 && buf[15] === 0x20) {
+        return { width: buf.readUInt16LE(26) & 0x3FFF, height: buf.readUInt16LE(28) & 0x3FFF };
+      }
+      // VP8L (lossless): "VP8L" at 12 → 5-byte chunk, w+1/h+1 packed into 28 bits at +21
+      if (buf[12] === 0x56 && buf[13] === 0x50 && buf[14] === 0x38 && buf[15] === 0x4C) {
+        const bits = buf.readUInt32LE(21);
+        return { width: (bits & 0x3FFF) + 1, height: ((bits >> 14) & 0x3FFF) + 1 };
+      }
+      // VP8X (extended): "VP8X" at 12 → 8-byte chunk, 24-bit LE w/h at +24
+      if (buf[12] === 0x56 && buf[13] === 0x50 && buf[14] === 0x38 && buf[15] === 0x58) {
+        const w = buf.readUInt32LE(24) & 0x00FF_FFFF;
+        const h = buf.readUInt32LE(27) & 0x00FF_FFFF;
+        return { width: w + 1, height: h + 1 };
+      }
+      return null;
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 function extFromCover(coverHref: string, mime: string | undefined): string {
   const fromMime: Record<string, string> = {
     "image/jpeg": "jpg",
@@ -782,10 +857,27 @@ export async function parseEpub(
           }
 
           const resolveLink = makeLinkResolver(docFullPath, spineToChapter, chapters.length);
-          allBlocks.push(...extractBlocks(doc, imageMap, docFullPath, resolveLink));
+          const blocks = extractBlocks(doc, imageMap, docFullPath, resolveLink);
+          allBlocks.push(...blocks);
         }
 
         if (allBlocks.length === 0) continue;
+
+        // Attach image dimensions so the renderer can reserve space before load.
+        if (imageDir) {
+          const imgDims = new Map<string, { width: number; height: number }>();
+          for (const [, savedPath] of imageMap) {
+            const dims = getImageDimensions(path.join(imageDir, path.basename(savedPath)));
+            if (dims) imgDims.set(savedPath, dims);
+          }
+          for (const b of allBlocks) {
+            if (b.type === "image" && b.src) {
+              const dims = imgDims.get(b.src);
+              if (dims) { b.imgWidth = dims.width; b.imgHeight = dims.height; }
+            }
+          }
+        }
+
         chapters.push({
           index: chapters.length,
           title: entry.label,
@@ -837,6 +929,22 @@ export async function parseEpub(
         const resolveLink = makeLinkResolver(docFullPath, spineToChapter, chapters.length);
         const blocks = extractBlocks(doc, imageMap, docFullPath, resolveLink);
         if (blocks.length === 0) continue;
+
+        // Attach image dimensions so the renderer can reserve space before load.
+        if (imageDir) {
+          const imgDims = new Map<string, { width: number; height: number }>();
+          for (const [, savedPath] of imageMap) {
+            const dims = getImageDimensions(path.join(imageDir, path.basename(savedPath)));
+            if (dims) imgDims.set(savedPath, dims);
+          }
+          for (const b of blocks) {
+            if (b.type === "image" && b.src) {
+              const dims = imgDims.get(b.src);
+              if (dims) { b.imgWidth = dims.width; b.imgHeight = dims.height; }
+            }
+          }
+        }
+
         chapters.push({
           index: chapters.length,
           title: chapterTitle(doc, `Chapter ${chapters.length + 1}`),
