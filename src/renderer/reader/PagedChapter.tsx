@@ -179,6 +179,7 @@ export function PagedChapter({
   reposition,
   onSpreadChange,
   onOverflow,
+  onLinkNavigate,
 }: {
   chapter: ReaderChapter;
   fontSize: number;
@@ -189,6 +190,8 @@ export function PagedChapter({
   onSpreadChange: (info: SpreadInfo) => void;
   /** User paged past the first (-1) or last (+1) spread of the chapter. */
   onOverflow: (dir: -1 | 1) => void;
+  /** User clicked an internal hyperlink with a resolved chapter target. */
+  onLinkNavigate?: (chapterIndex: number, fragment: string | null) => void;
 }) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -396,6 +399,20 @@ export function PagedChapter({
     return () => window.removeEventListener("keydown", onKey);
   }, [goNext, goPrev]);
 
+  // Intercept hyperlink clicks on <a data-chapter> elements.
+  const handleContentClick = useCallback(
+    (e: React.MouseEvent) => {
+      const anchor = (e.target as HTMLElement).closest?.("a[data-chapter]");
+      if (!anchor) return;
+      e.preventDefault();
+      const ch = parseInt(anchor.getAttribute("data-chapter")!, 10);
+      if (Number.isNaN(ch)) return;
+      const frag = anchor.getAttribute("data-fragment");
+      onLinkNavigate?.(ch, frag);
+    },
+    [onLinkNavigate]
+  );
+
   return (
     <div ref={viewportRef} className="relative min-w-0 flex-1 overflow-hidden">
       <div className="absolute inset-0 flex items-center justify-center">
@@ -411,6 +428,7 @@ export function PagedChapter({
           <div
             ref={contentRef}
             lang="en"
+            onClick={handleContentClick}
             className={`reader-content text-reader${animate ? " transition-transform duration-200 ease-out" : ""}`}
             style={{
               width: geom ? geom.contentWidth : "100%",

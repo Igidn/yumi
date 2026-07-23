@@ -62,20 +62,29 @@ const INLINE_TAG_MAP: Record<string, string> = {
   i: "em",
   strong: "strong",
   b: "strong",
+  a: "a",
 };
 
 function escapeHtmlText(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+/** Resolved target for an <a href> inside EPUB content. */
+export interface LinkTarget {
+  chapterIndex: number;
+  fragment?: string;
+}
+
 /**
  * Serialize a node's inline content to safe minimal HTML: text nodes are
- * escaped, <em>/<strong>/<br> are kept, every other element is unwrapped and
- * all attributes are dropped. The output is the only thing the renderer ever
- * injects via dangerouslySetInnerHTML, which keeps EPUB-sourced markup from
- * smuggling in scripts or styles.
+ * escaped, <em>/<strong>/<a>/<br> are kept, every other element is unwrapped
+ * and all attributes are dropped. For <a> tags the resolver maps the href
+ * to a chapter index so the renderer can navigate without re-parsing paths.
  */
-function inlineHtml(node: Node): string {
+function inlineHtml(
+  node: Node,
+  linkResolver?: (href: string) => LinkTarget | null
+): string {
   let out = "";
   for (let i = 0; i < node.childNodes.length; i++) {
     const child = node.childNodes[i];
@@ -91,8 +100,22 @@ function inlineHtml(node: Node): string {
       out += "<br/>";
       continue;
     }
-    const inner = inlineHtml(el);
     const tag = INLINE_TAG_MAP[local];
+    if (tag === "a" && linkResolver) {
+      const href = el.getAttribute("href");
+      const inner = inlineHtml(el, linkResolver);
+      if (href && inner.trim()) {
+        const target = linkResolver(href);
+        if (target) {
+          const frag = target.fragment ? ` data-fragment="${escapeHtmlText(target.fragment)}"` : "";
+          out += `<a data-chapter="${target.chapterIndex}"${frag} href="${escapeHtmlText(href)}">${inner}</a>`;
+          continue;
+        }
+      }
+      out += inner;
+      continue;
+    }
+    const inner = inlineHtml(el, linkResolver);
     out += tag && inner.trim() ? `<${tag}>${inner}</${tag}>` : inner;
   }
   return out;
@@ -114,11 +137,12 @@ function collapseInlineHtml(html: string): string {
 function makeBlock(
   type: ContentBlock["type"],
   node: Element,
-  level?: number
+  level?: number,
+  linkResolver?: (href: string) => LinkTarget | null
 ): ContentBlock | null {
   const text = textOf(node);
   if (!text) return null;
-  const html = collapseInlineHtml(inlineHtml(node));
+  const html = collapseInlineHtml(inlineHtml(node, linkResolver));
   const block: ContentBlock = { type, text };
   if (level !== undefined) block.level = level;
   if (html.includes("<")) block.html = html;
@@ -166,7 +190,8 @@ function buildFileMap(archive: any): Map<string, string> {
 function extractBlocks(
   doc: Document,
   imageMap?: Map<string, string>,
-  docHref?: string
+  docHref?: string,
+  linkResolver?: (href: string) => LinkTarget | null
 ): ContentBlock[] {
   const body =
     doc.getElementsByTagName("body")[0] ||
@@ -202,7 +227,7 @@ function extractBlocks(
       if (skip.has(nsLocal)) continue;
 
       if (/^h[1-6]$/.test(nsLocal)) {
-        const block = makeBlock("heading", node, +nsLocal[1]);
+        const block = makeBlock("heading", node, +nsLocal[1], linkResolver);
         if (block) blocks.push(block);
         continue;
       }
@@ -215,7 +240,7 @@ function extractBlocks(
           if (block) blocks.push(block);
           continue;
         }
-        const block = makeBlock("paragraph", node);
+        const block = makeBlock("paragraph", node, undefined, linkResolver);
         if (block) blocks.push(block);
         continue;
       }
@@ -237,7 +262,7 @@ function extractBlocks(
       // Unrecognized block: recurse — catches sections, divs, lists.
       // Lists become paragraphs per item to keep prose readable.
       if (nsLocal === "li") {
-        const block = makeBlock("paragraph", node);
+        const block = makeBlock("paragraph", node, undefined, linkResolver);
         if (block) blocks.push(block);
         continue;
       }
@@ -471,6 +496,10 @@ export async function parseEpub(
       : null;
   if (imageDir) fs.mkdirSync(imageDir, { recursive: true });
 
+  // Map each spine href (no fragment) to its chapter index so <a> links
+  // can be resolved during block extraction.
+  const spineToChapter = new Map<string, number>();
+
   const chapters: ParsedChapter[] = [];
   if (flatNav.length > 0) {
     for (let i = 0; i < flatNav.length; i++) {
@@ -491,6 +520,8 @@ export async function parseEpub(
       for (const item of spineItems) {
         if (item.index < startItem.index) continue;
         if (item.index >= nextStartIndex) break;
+        // Record spine→chapter mapping for link resolution.
+        spineToChapter.set(stripFragment(item.href), chapters.length);
         let doc: Document;
         try {
           // book.load routes through archive.request (no XHR) since archived=true.
@@ -535,7 +566,18 @@ export async function parseEpub(
         }
 
         const docFullPath = book.resolve(item.href).replace(/^\/+/, "");
-        allBlocks.push(...extractBlocks(doc, imageMap, docFullPath));
+        // Build link resolver for this spine doc so <a> tags get chapter
+        // targets embedded as data-chapter attributes.
+        const resolveLink = (href: string): LinkTarget | null => {
+          // Fragment-only link: same chapter.
+          if (href.startsWith("#")) return { chapterIndex: chapters.length, fragment: href.slice(1) };
+          const [path, fragment] = href.split("#");
+          const resolved = resolveHref(docFullPath, path || "");
+          const ch = spineToChapter.get(resolved);
+          if (ch === undefined) return null;
+          return fragment ? { chapterIndex: ch, fragment } : { chapterIndex: ch };
+        };
+        allBlocks.push(...extractBlocks(doc, imageMap, docFullPath, resolveLink));
       }
       if (allBlocks.length === 0) continue;
       chapters.push({
@@ -556,6 +598,7 @@ export async function parseEpub(
       } catch {
         continue;
       }
+        spineToChapter.set(stripFragment(item.href), chapters.length);
 
       if (imageDir) {
         const imgs = doc.getElementsByTagName("img");
@@ -588,7 +631,15 @@ export async function parseEpub(
       }
 
       const docFullPath = book.resolve(item.href).replace(/^\/+/, "");
-      const blocks = extractBlocks(doc, imageMap, docFullPath);
+      const resolveLink = (href: string): LinkTarget | null => {
+        if (href.startsWith("#")) return { chapterIndex: chapters.length, fragment: href.slice(1) };
+        const [path, fragment] = href.split("#");
+        const resolved = resolveHref(docFullPath, path || "");
+        const ch = spineToChapter.get(resolved);
+        if (ch === undefined) return null;
+        return fragment ? { chapterIndex: ch, fragment } : { chapterIndex: ch };
+      };
+      const blocks = extractBlocks(doc, imageMap, docFullPath, resolveLink);
       if (blocks.length === 0) continue;
       chapters.push({
         index: chapters.length,

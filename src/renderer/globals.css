@@ -129,6 +129,17 @@
   break-inside: avoid;
 }
 
+/* Hyperlinks inside reader content — understated, book-style. */
+.reader-content a {
+  color: var(--reader-accent);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.reader-content a:hover {
+  text-decoration: underline;
+}
+
 /* Flash-highlight for the block a search result jumped to. */
 @keyframes reader-flash {
   0% {
