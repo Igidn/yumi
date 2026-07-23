@@ -277,7 +277,7 @@ export function ReaderView({ bookId }: { bookId: number }) {
       className={`reader-${theme} flex h-screen flex-col overflow-hidden bg-reader font-ui text-reader`}
     >
       {/* Chrome header — drag region for the frameless window */}
-      <header className="app-drag relative z-10 flex h-[46px] shrink-0 items-center justify-between pl-[86px] pr-3">
+      <header className="app-drag relative z-10 flex h-[52px] shrink-0 items-center justify-between pl-[78px] pr-3">
         <div className="app-no-drag flex items-center gap-1">
           <button
             onClick={() => {

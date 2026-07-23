@@ -9,6 +9,9 @@ import type {
   ReaderPayload,
 } from "../shared/types";
 
+/** Per-book parse lock so two concurrent reader:load calls don't both insert. */
+const parseLocks = new Map<number, ReturnType<typeof doParseEpub>>();
+
 function blocksFromRaw(rawText: string): ContentBlock[] {
   try {
     const parsed = JSON.parse(rawText);
@@ -18,6 +21,30 @@ function blocksFromRaw(rawText: string): ContentBlock[] {
     // failing the whole book; re-import restores it.
     return [];
   }
+}
+
+/** Parse EPUB into chapter rows and insert them. Factored out so the lock can reuse it. */
+async function doParseEpub(
+  bookId: number,
+  sourcePath: string,
+  scrollByTitle?: Map<string, number>
+) {
+  const db = await getDb();
+  const parsed = await parseEpub(sourcePath);
+  for (const chapter of parsed.chapters) {
+    await db.insert(chapters).values({
+      bookId,
+      title: chapter.title,
+      index: chapter.index,
+      rawText: chapter.rawText,
+      scrollPosition: scrollByTitle?.get(chapter.title) ?? 0,
+    });
+  }
+  return db
+    .select()
+    .from(chapters)
+    .where(eq(chapters.bookId, bookId))
+    .orderBy(asc(chapters.index));
 }
 
 /**
@@ -52,9 +79,7 @@ async function ensureChapters(
     const looksBuggy = [...titleCounts.values()].some((n) => n >= 2);
     if (!looksBuggy || format !== "epub") return existing;
 
-    // Parse first; only mutate the table once we know the new chapter list
-    // is ready — a failure mid-parse must not leave the book empty.
-    const parsed = await parseEpub(sourcePath);
+    // Self-heal: delete duplicates and re-parse once.
     const scrollByTitle = new Map<string, number>();
     for (const c of existing) {
       if (c.scrollPosition > (scrollByTitle.get(c.title) ?? 0)) {
@@ -62,38 +87,22 @@ async function ensureChapters(
       }
     }
     await db.delete(chapters).where(eq(chapters.bookId, bookId));
-    for (const chapter of parsed.chapters) {
-      await db.insert(chapters).values({
-        bookId,
-        title: chapter.title,
-        index: chapter.index,
-        rawText: chapter.rawText,
-        scrollPosition: scrollByTitle.get(chapter.title) ?? 0,
-      });
-    }
-    return db
-      .select()
-      .from(chapters)
-      .where(eq(chapters.bookId, bookId))
-      .orderBy(asc(chapters.index));
+    return doParseEpub(bookId, sourcePath, scrollByTitle);
   }
 
   if (format !== "epub") return existing;
 
-  const parsed = await parseEpub(sourcePath);
-  for (const chapter of parsed.chapters) {
-    await db.insert(chapters).values({
-      bookId,
-      title: chapter.title,
-      index: chapter.index,
-      rawText: chapter.rawText,
-    });
+  // ponytail: per-book lock prevents duplicate inserts when two reader
+  // windows open the same uncached book before the first parse finishes.
+  const inflight = parseLocks.get(bookId);
+  if (inflight) return inflight;
+  const promise = doParseEpub(bookId, sourcePath);
+  parseLocks.set(bookId, promise);
+  try {
+    return await promise;
+  } finally {
+    parseLocks.delete(bookId);
   }
-  return db
-    .select()
-    .from(chapters)
-    .where(eq(chapters.bookId, bookId))
-    .orderBy(asc(chapters.index));
 }
 
 /**
