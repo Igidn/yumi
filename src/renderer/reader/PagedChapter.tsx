@@ -179,6 +179,8 @@ export function PagedChapter({
   reposition,
   onSpreadChange,
   onOverflow,
+  onLinkNavigate,
+  fragmentTarget,
 }: {
   chapter: ReaderChapter;
   fontSize: number;
@@ -189,6 +191,10 @@ export function PagedChapter({
   onSpreadChange: (info: SpreadInfo) => void;
   /** User paged past the first (-1) or last (+1) spread of the chapter. */
   onOverflow: (dir: -1 | 1) => void;
+  /** User clicked an internal hyperlink with a resolved chapter target. */
+  onLinkNavigate?: (chapterIndex: number, fragment: string | null) => void;
+  /** Fragment ID + nonce to scroll to after geometry is measured (nonce forces re-fire). */
+  fragmentTarget?: { fragment: string | null; nonce: number };
 }) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -204,6 +210,7 @@ export function PagedChapter({
   const fractionRef = useRef(initialFraction);
   const lastJumpNonce = useRef(0);
   const lastRepositionNonce = useRef(0);
+  const lastFragmentNonce = useRef(0);
 
   // Chapter switch: drop geometry (hides content) and reseed the position.
   // This is the render-time derived-state reset pattern; the layout effect
@@ -216,6 +223,7 @@ export function PagedChapter({
     fractionRef.current = initialFraction;
     lastJumpNonce.current = 0;
     lastRepositionNonce.current = 0;
+    lastFragmentNonce.current = 0;
   }
 
   const measure = useCallback(() => {
@@ -333,9 +341,32 @@ export function PagedChapter({
     const target = Math.floor(el.offsetLeft / (geom.stride * geom.perSpread));
     setSpread(Math.min(Math.max(0, target), geom.spreads - 1));
     el.classList.add("reader-flash");
-    const timer = setTimeout(() => el.classList.remove("reader-flash"), 1700);
+    const timer = setTimeout(() => el.classList.remove("reader-flash"), 10000);
     return () => clearTimeout(timer);
   }, [jump, geom]);
+
+  // Fragment-based scroll: find the element with the matching id and scroll to its spread.
+  useEffect(() => {
+    if (!geom || !fragmentTarget?.fragment) return;
+    if (fragmentTarget.nonce === lastFragmentNonce.current) return;
+    lastFragmentNonce.current = fragmentTarget.nonce;
+    const content = contentRef.current;
+    if (!content) return;
+    const el = content.querySelector<HTMLElement>(
+      `[id="${CSS.escape(fragmentTarget.fragment)}"]`
+    );
+    if (!el) return;
+    // Use bounding rect relative to the content container — offsetLeft is
+    // relative to offsetParent, which is wrong for inline targets inside <p>.
+    const contentRect = content.getBoundingClientRect();
+    const elRect = el.getBoundingClientRect();
+    const xOffset = elRect.left - contentRect.left;
+    const target = Math.floor(xOffset / (geom.stride * geom.perSpread));
+    setSpread(Math.min(Math.max(0, target), geom.spreads - 1));
+    el.classList.add("reader-flash");
+    const timer = setTimeout(() => el.classList.remove("reader-flash"), 10000);
+    return () => clearTimeout(timer);
+  }, [geom, fragmentTarget]);
 
   const goNext = useCallback(() => {
     if (!geom) return;
@@ -396,6 +427,22 @@ export function PagedChapter({
     return () => window.removeEventListener("keydown", onKey);
   }, [goNext, goPrev]);
 
+  // Intercept hyperlink clicks on <a data-chapter> elements.
+  const handleContentClick = useCallback(
+    (e: React.MouseEvent) => {
+      // e.target may be a text node — walk up to the nearest element first.
+      const el = e.target instanceof Element ? e.target : (e.target as Node).parentElement;
+      const anchor = el?.closest("a[data-chapter]");
+      if (!anchor) return;
+      e.preventDefault();
+      const ch = parseInt(anchor.getAttribute("data-chapter")!, 10);
+      if (Number.isNaN(ch)) return;
+      const frag = anchor.getAttribute("data-fragment");
+      onLinkNavigate?.(ch, frag);
+    },
+    [onLinkNavigate]
+  );
+
   return (
     <div ref={viewportRef} className="relative min-w-0 flex-1 overflow-hidden">
       <div className="absolute inset-0 flex items-center justify-center">
@@ -411,6 +458,7 @@ export function PagedChapter({
           <div
             ref={contentRef}
             lang="en"
+            onClick={handleContentClick}
             className={`reader-content text-reader${animate ? " transition-transform duration-200 ease-out" : ""}`}
             style={{
               width: geom ? geom.contentWidth : "100%",
@@ -433,6 +481,7 @@ export function PagedChapter({
                 return (
                   <img
                     key={i}
+                    id={block.fragment || undefined}
                     data-b={i}
                     src={src}
                     alt={block.text || ""}
@@ -451,7 +500,7 @@ export function PagedChapter({
                 const level = Math.min(6, Math.max(1, block.level ?? 1));
                 const Tag = `h${level}` as "h1";
                 return (
-                  <Tag key={i} data-b={i} className={headingClass(level, i === 0)}>
+                  <Tag key={i} id={block.fragment || undefined} data-b={i} className={headingClass(level, i === 0)}>
                     {body}
                   </Tag>
                 );
@@ -460,7 +509,7 @@ export function PagedChapter({
               // heading; every paragraph after another paragraph is indented.
               const indent = i > 0 && chapter.blocks[i - 1].type === "paragraph";
               return (
-                <p key={i} data-b={i} className={indent ? "reader-indent" : undefined}>
+                <p key={i} id={block.fragment || undefined} data-b={i} className={indent ? "reader-indent" : undefined}>
                   {body}
                 </p>
               );

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { List, Search } from "lucide-react";
+import { List, Search, Undo2 } from "lucide-react";
 import type { ReaderPayload } from "../../shared/types";
 import {
   PagedChapter,
@@ -19,6 +19,11 @@ import {
 } from "../reader/settings";
 
 type Panel = "toc" | "search" | null;
+
+interface HistoryEntry {
+  chapterPos: number;
+  fraction: number;
+}
 
 const PROGRESS_SAVE_MS = 400;
 
@@ -43,6 +48,11 @@ export function ReaderView({ bookId }: { bookId: number }) {
   const [appearanceOpen, setAppearanceOpen] = useState(false);
   const [jump, setJump] = useState<PageJump | null>(null);
   const [reposition, setReposition] = useState<Reposition | null>(null);
+  // Hyperlink history: stack of positions visited before clicking a link.
+  const [linkHistory, setLinkHistory] = useState<HistoryEntry[]>([]);
+  const [backButton, setBackButton] = useState<{
+    side: "left" | "right";
+  } | null>(null);
 
   const nonceRef = useRef(1);
   const payloadRef = useRef<ReaderPayload | null>(null);
@@ -145,9 +155,45 @@ export function ReaderView({ bookId }: { bookId: number }) {
     [chapterPos, goToChapter]
   );
 
+  // Fragment target + nonce for scrolling after chapter mount (nonce forces re-fire).
+  const [fragmentTarget, setFragmentTarget] = useState<{
+    fragment: string | null;
+    nonce: number;
+  }>({ fragment: null, nonce: 0 });
+
+  // Hyperlink navigation: push current position, jump to target chapter.
+  const handleLinkNavigate = useCallback(
+    (targetChapter: number, fragment: string | null) => {
+      if (targetChapter === chapterPos) {
+        // Same-chapter link: increment nonce so re-clicks on the same fragment re-fire.
+        setFragmentTarget((prev) => ({ fragment, nonce: prev.nonce + 1 }));
+        return;
+      }
+      const fraction = pageInfo?.fraction ?? 0;
+      setLinkHistory((prev) => [...prev, { chapterPos, fraction }]);
+      setBackButton({ side: targetChapter < chapterPos ? "right" : "left" });
+      goToChapter(targetChapter, 0);
+      setFragmentTarget((prev) => ({ fragment, nonce: prev.nonce + 1 }));
+    },
+    [chapterPos, pageInfo?.fraction, goToChapter]
+  );
+
+  // Back button: pop last history entry and return to it.
+  const handleBack = useCallback(() => {
+    const entry = linkHistory[linkHistory.length - 1];
+    if (!entry) return;
+    setLinkHistory((prev) => prev.slice(0, -1));
+    setBackButton(null);
+    setFragmentTarget({ fragment: null, nonce: 0 });
+    goToChapter(entry.chapterPos, entry.fraction);
+  }, [linkHistory, goToChapter]);
+
   const handleTocSelect = useCallback(
     (pos: number) => {
       setPanel(null);
+      setLinkHistory([]);
+      setBackButton(null);
+      setFragmentTarget({ fragment: null, nonce: 0 });
       if (pos === chapterPos) {
         setReposition({ fraction: 0, nonce: nonceRef.current++ });
       } else {
@@ -160,6 +206,9 @@ export function ReaderView({ bookId }: { bookId: number }) {
   const handleSearchJump = useCallback(
     (pos: number, blockIndex: number) => {
       setPanel(null);
+      setLinkHistory([]);
+      setBackButton(null);
+      setFragmentTarget({ fragment: null, nonce: 0 });
       setJump({ blockIndex, nonce: nonceRef.current++ });
       if (pos !== chapterPos) goToChapter(pos, 0, true);
     },
@@ -193,9 +242,15 @@ export function ReaderView({ bookId }: { bookId: number }) {
       if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA")) return;
       if ((e.metaKey || e.ctrlKey) && e.key === "[") {
         e.preventDefault();
+        setLinkHistory([]);
+        setBackButton(null);
+        setFragmentTarget({ fragment: null, nonce: 0 });
         goToChapter(chapterPos - 1, 0);
       } else if ((e.metaKey || e.ctrlKey) && e.key === "]") {
         e.preventDefault();
+        setLinkHistory([]);
+        setBackButton(null);
+        setFragmentTarget({ fragment: null, nonce: 0 });
         goToChapter(chapterPos + 1, 0);
       } else if ((e.metaKey || e.ctrlKey) && e.key === "f") {
         e.preventDefault();
@@ -336,6 +391,7 @@ export function ReaderView({ bookId }: { bookId: number }) {
 
       {/* Reading surface */}
       {chapter ? (
+        <div className="relative flex min-h-0 flex-1 flex-col">
         <PagedChapter
           key={chapter.id}
           chapter={chapter}
@@ -344,9 +400,12 @@ export function ReaderView({ bookId }: { bookId: number }) {
           initialFraction={landingFraction}
           jump={jump}
           reposition={reposition}
+          fragmentTarget={fragmentTarget}
           onSpreadChange={handleSpreadChange}
           onOverflow={handleOverflow}
+          onLinkNavigate={handleLinkNavigate}
         />
+        </div>
       ) : (
         <div className="flex flex-1 items-center justify-center px-8">
           <p className="max-w-[420px] text-center text-[13px] leading-relaxed text-reader-muted">
@@ -355,13 +414,41 @@ export function ReaderView({ bookId }: { bookId: number }) {
         </div>
       )}
 
-      {/* Footer: current page, Apple Books style */}
-      <footer className="flex h-[30px] shrink-0 select-none items-center justify-center">
-        {chapter && pageLabel !== null && (
-          <span className="text-[12px] tabular-nums text-reader-muted">
-            {pageLabel}
-          </span>
-        )}
+      {/* Footer: back button + page indicator, Apple Books style */}
+      <footer className="flex h-[36px] shrink-0 select-none items-center justify-between px-4">
+        <div className="flex-1">
+          {backButton && backButton.side === "left" && (
+            <button
+              onClick={handleBack}
+              className="app-no-drag flex items-center gap-1 text-[12px] text-reader-muted transition-colors hover:text-reader"
+              aria-label="Back to previous page"
+            >
+              <Undo2 size={14} strokeWidth={1.75} />
+              Back
+            </button>
+          )}
+        </div>
+
+        <div className="flex-1 text-center">
+          {chapter && pageLabel !== null && (
+            <span className="text-[12px] tabular-nums text-reader-muted">
+              {pageLabel}
+            </span>
+          )}
+        </div>
+
+        <div className="flex-1 flex justify-end">
+          {backButton && backButton.side === "right" && (
+            <button
+              onClick={handleBack}
+              className="app-no-drag flex items-center gap-1 text-[12px] text-reader-muted transition-colors hover:text-reader"
+              aria-label="Back to previous page"
+            >
+              Back
+              <Undo2 size={14} strokeWidth={1.75} className="scale-x-[-1]" />
+            </button>
+          )}
+        </div>
       </footer>
 
       {/* Panels */}
