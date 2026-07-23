@@ -1,8 +1,14 @@
+import fs from "fs";
+import path from "path";
 import { BrowserWindow, dialog, ipcMain } from "electron";
 import { eq } from "drizzle-orm";
 import { getDb, hasFts5 } from "./database";
 import { appSettings, books } from "./db/schema";
-import { bookForRenderer, importBook } from "./import";
+import {
+  bookForRenderer,
+  getCoversDir,
+  importBook,
+} from "./import";
 import type {
   IPCChannel,
   IPCPayloads,
@@ -78,6 +84,48 @@ export function registerIpcHandlers(): void {
     return bookForRenderer(rows[0]);
   });
 
+  handle("books:update", async (_, payload) => {
+    const db = await getDb();
+    const existing = (
+      await db.select().from(books).where(eq(books.id, payload.id)).limit(1)
+    )[0];
+    if (!existing) throw new Error(`Book not found: ${payload.id}`);
+
+    const patch: {
+      title?: string;
+      author?: string;
+      coverPath?: string;
+    } = {};
+    if (payload.title !== undefined) patch.title = payload.title.trim() || "Untitled";
+    if (payload.author !== undefined) patch.author = payload.author;
+
+    if (payload.coverSourcePath) {
+      const src = path.resolve(payload.coverSourcePath);
+      if (!fs.existsSync(src) || !fs.statSync(src).isFile()) {
+        throw new Error(`Cover file not found: ${src}`);
+      }
+      const ext = path.extname(src).toLowerCase().replace(".", "") || "jpg";
+      const dest = path.join(
+        getCoversDir(),
+        `${existing.sha256 ?? existing.id}.${ext}`
+      );
+      await fs.promises.copyFile(src, dest);
+      // Drop previous cover if it lived somewhere else under covers/.
+      if (existing.coverPath && existing.coverPath !== dest) {
+        fs.rmSync(existing.coverPath, { force: true });
+      }
+      patch.coverPath = dest;
+    }
+
+    const rows = await db
+      .update(books)
+      .set(patch)
+      .where(eq(books.id, payload.id))
+      .returning();
+    broadcastEvent("library:changed");
+    return bookForRenderer(rows[0]);
+  });
+
   handle("import:book", async (_, payload) => {
     const outcome = await importBook(
       payload.sourcePath,
@@ -92,24 +140,33 @@ export function registerIpcHandlers(): void {
 
   handle("dialog:openFile", async () => {
     const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
+    const opts: Electron.OpenDialogOptions = {
+      title: "Import a book",
+      properties: ["openFile", "multiSelections"],
+      filters: [
+        { name: "Ebooks", extensions: ["epub", "pdf"] },
+        { name: "All files", extensions: ["*"] },
+      ],
+    };
     const result = win
-      ? await dialog.showOpenDialog(win, {
-          title: "Import a book",
-          properties: ["openFile", "multiSelections"],
-          filters: [
-            { name: "Ebooks", extensions: ["epub", "pdf"] },
-            { name: "All files", extensions: ["*"] },
-          ],
-        })
-      : await dialog.showOpenDialog({
-          title: "Import a book",
-          properties: ["openFile", "multiSelections"],
-          filters: [
-            { name: "Ebooks", extensions: ["epub", "pdf"] },
-            { name: "All files", extensions: ["*"] },
-          ],
-        });
+      ? await dialog.showOpenDialog(win, opts)
+      : await dialog.showOpenDialog(opts);
     return result.canceled ? [] : result.filePaths;
+  });
+
+  handle("dialog:openImage", async () => {
+    const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
+    const opts: Electron.OpenDialogOptions = {
+      title: "Choose a cover image",
+      properties: ["openFile"],
+      filters: [
+        { name: "Images", extensions: ["png", "jpg", "jpeg", "webp", "gif"] },
+      ],
+    };
+    const result = win
+      ? await dialog.showOpenDialog(win, opts)
+      : await dialog.showOpenDialog(opts);
+    return result.canceled ? null : (result.filePaths[0] ?? null);
   });
 
   handle("db:fts5", async () => {

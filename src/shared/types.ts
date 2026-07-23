@@ -29,8 +29,10 @@ export type IPCChannel =
   | "settings:set"
   | "books:list"
   | "books:insert"
+  | "books:update"
   | "import:book"
   | "dialog:openFile"
+  | "dialog:openImage"
   | "db:fts5";
 
 /** Result of an `import:book` call (SPEC §1 duplicate handling). */
@@ -44,6 +46,13 @@ export interface IPCPayloads {
   "settings:set": { key: string; value: string };
   "books:list": void;
   "books:insert": { title: string; author: string; format: BookFormat };
+  "books:update": {
+    id: number;
+    title?: string;
+    author?: string;
+    // Absolute path to a new cover image; main copies it into covers/.
+    coverSourcePath?: string;
+  };
   "import:book": {
     sourcePath: string;
     // Resolution for a detected duplicate. Omit ("prompt") to detect and
@@ -52,6 +61,7 @@ export interface IPCPayloads {
     duplicateHandling?: "skip" | "replace";
   };
   "dialog:openFile": void;
+  "dialog:openImage": void;
   "db:fts5": void;
 }
 
@@ -60,8 +70,10 @@ export interface IPCResponses {
   "settings:set": void;
   "books:list": Book[];
   "books:insert": Book;
+  "books:update": Book;
   "import:book": ImportOutcome;
   "dialog:openFile": string[];
+  "dialog:openImage": string | null;
   "db:fts5": boolean;
 }
 

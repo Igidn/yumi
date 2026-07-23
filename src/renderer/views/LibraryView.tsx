@@ -1,55 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
+import { EllipsisVertical, Plus, Search } from "lucide-react";
 import type { Book } from "../../shared/types";
 import { useImport } from "../hooks/useImport";
 import { DuplicatePrompt } from "../components/DuplicatePrompt";
-
-function SearchIcon() {
-  return (
-    <svg
-      width="18"
-      height="18"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <circle cx="11" cy="11" r="8" />
-      <path d="m21 21-4.3-4.3" />
-    </svg>
-  );
-}
-
-function PlusIcon() {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <line x1="12" y1="5" x2="12" y2="19" />
-      <line x1="5" y1="12" x2="19" y2="12" />
-    </svg>
-  );
-}
-
-function MoreIcon() {
-  return (
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-      <circle cx="12" cy="5" r="1.5" />
-      <circle cx="12" cy="12" r="1.5" />
-      <circle cx="12" cy="19" r="1.5" />
-    </svg>
-  );
-}
+import { BookDetail } from "../components/BookDetail";
 
 function progressLabel(book: Book): string {
   return book.progress >= 1
@@ -70,7 +24,15 @@ function CoverPlaceholder({ title, author }: { title: string; author: string }) 
   );
 }
 
-function BookCard({ book, onOpen }: { book: Book; onOpen: () => void }) {
+function BookCard({
+  book,
+  onOpen,
+  onDetails,
+}: {
+  book: Book;
+  onOpen: () => void;
+  onDetails: () => void;
+}) {
   const [broken, setBroken] = useState(false);
   const showCover = !!book.coverPath && !broken;
 
@@ -95,10 +57,14 @@ function BookCard({ book, onOpen }: { book: Book; onOpen: () => void }) {
       <div className="mt-[8px] flex h-[24px] items-center justify-between">
         <span className="text-[12px] text-muted">{progressLabel(book)}</span>
         <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onDetails();
+          }}
           className="text-muted transition-colors hover:text-ink"
           aria-label={`More options for ${book.title}`}
         >
-          <MoreIcon />
+          <EllipsisVertical size={18} strokeWidth={1.75} />
         </button>
       </div>
     </div>
@@ -110,6 +76,7 @@ export function LibraryView({ onOpenBook }: { onOpenBook: () => void }) {
   const [query, setQuery] = useState("");
   const [titleAsc, setTitleAsc] = useState(true);
   const [importMessage, setImportMessage] = useState<string | null>(null);
+  const [detailBookId, setDetailBookId] = useState<number | null>(null);
   const { importing, importPaths, pendingDuplicate, resolveDuplicate } =
     useImport();
 
@@ -151,6 +118,11 @@ export function LibraryView({ onOpenBook }: { onOpenBook: () => void }) {
     );
   }, [books, query, titleAsc]);
 
+  const detailBook =
+    detailBookId === null
+      ? null
+      : (books.find((b) => b.id === detailBookId) ?? null);
+
   const handleImport = async () => {
     setImportMessage(null);
     const paths = await window.yumi.invoke("dialog:openFile");
@@ -174,7 +146,7 @@ export function LibraryView({ onOpenBook }: { onOpenBook: () => void }) {
       <div className="mx-auto -mt-3 flex w-full max-w-[551px] gap-[6px] px-4">
         <div className="relative flex-1">
           <span className="pointer-events-none absolute left-[12px] top-1/2 -translate-y-1/2 text-muted">
-            <SearchIcon />
+            <Search size={18} strokeWidth={2} />
           </span>
           <input
             type="text"
@@ -190,7 +162,7 @@ export function LibraryView({ onOpenBook }: { onOpenBook: () => void }) {
           className="app-no-drag flex h-[36px] shrink-0 items-center gap-1.5 rounded-[8px] border border-edge bg-field px-4 text-[12px] text-ink transition-colors hover:text-ink disabled:opacity-60"
           aria-label="Import a book"
         >
-          <PlusIcon />
+          <Plus size={14} strokeWidth={2} />
           <span>{importing ? "Importing…" : "Import"}</span>
         </button>
         <button
@@ -217,6 +189,18 @@ export function LibraryView({ onOpenBook }: { onOpenBook: () => void }) {
         />
       )}
 
+      {detailBook && (
+        <BookDetail
+          book={detailBook}
+          onClose={() => setDetailBookId(null)}
+          onUpdated={(updated) =>
+            setBooks((prev) =>
+              prev.map((b) => (b.id === updated.id ? updated : b)),
+            )
+          }
+        />
+      )}
+
       {/* Book grid */}
       {visibleBooks.length === 0 ? (
         <p className="mt-[40px] text-center text-[13px] text-muted">
@@ -225,7 +209,12 @@ export function LibraryView({ onOpenBook }: { onOpenBook: () => void }) {
       ) : (
         <div className="mt-[31px] grid grid-cols-[repeat(auto-fill,170px)] justify-center gap-x-[55px] gap-y-[48px] px-6">
           {visibleBooks.map((book) => (
-            <BookCard key={book.id} book={book} onOpen={onOpenBook} />
+            <BookCard
+              key={book.id}
+              book={book}
+              onOpen={onOpenBook}
+              onDetails={() => setDetailBookId(book.id)}
+            />
           ))}
         </div>
       )}
