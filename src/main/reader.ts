@@ -2,7 +2,7 @@ import { asc, eq } from "drizzle-orm";
 import { getDb } from "./database";
 import { books, chapters } from "./db/schema";
 import { parseEpub } from "./epub";
-import { bookForRenderer } from "./import";
+import { bookForRenderer, coverUrlForRenderer } from "./import";
 import type {
   ContentBlock,
   ReaderChapter,
@@ -128,6 +128,18 @@ export async function loadReaderBook(bookId: number): Promise<ReaderPayload> {
     scrollPosition: row.scrollPosition,
     blocks: blocksFromRaw(row.rawText),
   }));
+
+  // Prepend the book cover as the first image in chapter zero.
+  const coverUrl = coverUrlForRenderer(book.coverPath);
+  if (coverUrl && readerChapters.length > 0) {
+    // Strip yumi://asset/ to get the relative path the renderer expects.
+    const rel = coverUrl.replace(/^yumi:\/\/asset\//, "");
+    readerChapters[0].blocks.unshift({
+      type: "image",
+      text: "Cover",
+      src: rel,
+    });
+  }
 
   // books.progress is the whole-book fraction written by saveReaderProgress:
   // (chapterPos + chapterFraction) / chapterCount, so floor(progress * count)
