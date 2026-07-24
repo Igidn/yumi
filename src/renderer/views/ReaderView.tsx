@@ -54,56 +54,6 @@ export function ReaderView({ bookId }: { bookId: number }) {
     side: "left" | "right";
   } | null>(null);
 
-  // Auto-hide chrome: fades header when mouse isn't near the top edge,
-  // Apple Books style. Always visible when a panel is open.
-  const [chromeVisible, setChromeVisible] = useState(true);
-  const chromeTimer = useRef<number | null>(null);
-  const chromePinned = panel !== null || appearanceOpen;
-  const showChrome = chromeVisible || chromePinned;
-
-  const scheduleChromeHide = useCallback(() => {
-    if (chromeTimer.current) clearTimeout(chromeTimer.current);
-    chromeTimer.current = window.setTimeout(() => {
-      if (!chromePinned) setChromeVisible(false);
-    }, 2000);
-  }, [chromePinned]);
-
-  const handleChromeMove = useCallback(
-    (e: React.MouseEvent) => {
-      if (chromePinned) return;
-      if (e.clientY < 60) {
-        setChromeVisible(true);
-        if (chromeTimer.current) {
-          clearTimeout(chromeTimer.current);
-          chromeTimer.current = null;
-        }
-      } else if (chromeVisible) {
-        scheduleChromeHide();
-      }
-    },
-    [chromePinned, chromeVisible, scheduleChromeHide]
-  );
-
-  // Show chrome when a panel opens, start hide timer when all close.
-  useEffect(() => {
-    if (chromePinned) {
-      setChromeVisible(true);
-      if (chromeTimer.current) {
-        clearTimeout(chromeTimer.current);
-        chromeTimer.current = null;
-      }
-    } else {
-      scheduleChromeHide();
-    }
-  }, [chromePinned, scheduleChromeHide]);
-
-  // Cleanup timer on unmount.
-  useEffect(() => {
-    return () => {
-      if (chromeTimer.current) clearTimeout(chromeTimer.current);
-    };
-  }, []);
-
   const nonceRef = useRef(1);
   const payloadRef = useRef<ReaderPayload | null>(null);
   // Latest position for progress writes; chapterId 0 = nothing to save yet.
@@ -380,14 +330,9 @@ export function ReaderView({ bookId }: { bookId: number }) {
   return (
     <div
       className={`reader-${theme} flex h-screen flex-col overflow-hidden bg-reader font-ui text-reader`}
-      onMouseMove={handleChromeMove}
-      onMouseLeave={() => { if (!chromePinned) scheduleChromeHide(); }}
     >
-      {/* Chrome header — auto-hides when mouse leaves the top zone */}
-      <header
-        className={`app-drag relative z-10 flex h-[52px] shrink-0 items-center justify-between pl-[78px] pr-3 transition-opacity duration-300 ${
-          showChrome ? "opacity-100" : "opacity-0 pointer-events-none"
-        }`}
+      {/* Chrome header — drag region for the frameless window */}
+      <header className="app-drag relative z-10 flex h-[52px] shrink-0 items-center justify-between pl-[78px] pr-3">
         <div className="app-no-drag flex items-center gap-1">
           <button
             onClick={() => {
