@@ -8,6 +8,8 @@ const INLINE_TAG_MAP: Record<string, string> = {
   b: "strong",
   a: "a",
   span: "span",
+  sup: "sup",
+  sub: "sub",
 };
 
 export function escapeHtmlText(s: string): string {
@@ -53,22 +55,26 @@ export function inlineHtml(
       continue;
     }
 
-    if (tag === "a" && linkResolver) {
+    if (tag === "a") {
       const href = el.getAttribute("href");
+      const epubType = el.getAttribute("epub:type") || "";
+      const isNoteref = epubType === "noteref";
       const inner = inlineHtml(el, linkResolver);
-      if (href && inner.trim()) {
+      if (href && inner.trim() && linkResolver) {
         const target = linkResolver(href);
         if (target) {
           const frag = target.fragment ? ` data-fragment="${escapeHtmlText(target.fragment)}"` : "";
-          out += `<a${idAttr} data-chapter="${target.chapterIndex}"${frag} href="${escapeHtmlText(href)}">${inner}</a>`;
+          const a = `<a${idAttr} data-chapter="${target.chapterIndex}"${frag} href="${escapeHtmlText(href)}">${inner}</a>`;
+          out += isNoteref ? `<sup class="noteref">${a}</sup>` : a;
           continue;
         }
       }
       if (elId && inner.trim()) {
-        out += `<a${idAttr}>${inner}</a>`;
+        const a = `<a${idAttr}>${inner}</a>`;
+        out += isNoteref ? `<sup class="noteref">${a}</sup>` : a;
         continue;
       }
-      out += inner;
+      out += isNoteref ? `<sup class="noteref">${inner}</sup>` : inner;
       continue;
     }
     const inner = inlineHtml(el, linkResolver);

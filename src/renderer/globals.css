@@ -138,6 +138,31 @@
   object-fit: contain;
 }
 
+/* Superscript / subscript — footnote references, math, etc. */
+.reader-content sup,
+.reader-content sub {
+  font-size: 0.75em;
+  line-height: 0;
+  position: relative;
+}
+
+.reader-content sup {
+  vertical-align: super;
+}
+
+.reader-content sub {
+  vertical-align: sub;
+}
+
+/* Footnote reference links — slightly muted so they don't distract. */
+.reader-content sup.noteref a {
+  color: var(--reader-muted);
+}
+
+.reader-content sup.noteref a:hover {
+  color: var(--reader-accent);
+}
+
 /* Hyperlinks inside reader content — understated, book-style. */
 .reader-content a {
   color: var(--reader-accent);
