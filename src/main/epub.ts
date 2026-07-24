@@ -657,12 +657,15 @@ async function loadNav(epub: Epub): Promise<{ label: string; href: string }[]> {
         if (!epubType || !epubType.split(/\s+/).includes("toc")) continue;
         const entries = parseNavXhtml(navEl);
         if (entries.length > 0) {
+          // Resolve nav-relative hrefs against the OPF root so they match
+          // spine hrefs exactly — a plain concat breaks when the nav file
+          // lives in a subdirectory and uses ../
           const navDir = epub.navPath.includes("/")
             ? epub.navPath.substring(0, epub.navPath.lastIndexOf("/") + 1)
             : "";
           return entries.map((e) => ({
             label: e.label,
-            href: navDir + e.href,
+            href: resolveHref(navDir, e.href),
           }));
         }
       }
@@ -676,7 +679,17 @@ async function loadNav(epub: Epub): Promise<{ label: string; href: string }[]> {
     try {
       const doc = await epub.load(epub.ncxPath);
       const items = parseNcx(doc);
-      if (items.length > 0) return items;
+      if (items.length > 0) {
+        // NCX src values are relative to the NCX file, prefix its
+        // directory so they match OPF-relative spine hrefs.
+        const ncxDir = epub.ncxPath.includes("/")
+          ? epub.ncxPath.substring(0, epub.ncxPath.lastIndexOf("/") + 1)
+          : "";
+        return items.map((e) => ({
+          label: e.label,
+          href: resolveHref(ncxDir, e.href),
+        }));
+      }
     } catch {
       // ponytail: fall through
     }
