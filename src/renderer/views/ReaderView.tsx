@@ -174,14 +174,14 @@ export function ReaderView({ bookId }: { bookId: number }) {
   // Hyperlink navigation: push current position, jump to target chapter.
   const handleLinkNavigate = useCallback(
     (targetChapter: number, fragment: string | null) => {
-      if (targetChapter === chapterPos) {
-        // Same-chapter link: increment nonce so re-clicks on the same fragment re-fire.
-        setFragmentTarget((prev) => ({ fragment, nonce: prev.nonce + 1 }));
-        return;
-      }
       const fraction = pageInfo?.fraction ?? 0;
       setLinkHistory((prev) => [...prev, { chapterPos, fraction }]);
       setBackButton({ side: targetChapter < chapterPos ? "right" : "left" });
+      if (targetChapter === chapterPos) {
+        // Same-chapter link: stay in chapter, just scroll to fragment.
+        setFragmentTarget((prev) => ({ fragment, nonce: prev.nonce + 1 }));
+        return;
+      }
       goToChapter(targetChapter, 0);
       setFragmentTarget((prev) => ({ fragment, nonce: prev.nonce + 1 }));
     },
@@ -192,11 +192,24 @@ export function ReaderView({ bookId }: { bookId: number }) {
   const handleBack = useCallback(() => {
     const entry = linkHistory[linkHistory.length - 1];
     if (!entry) return;
-    setLinkHistory((prev) => prev.slice(0, -1));
-    setBackButton(null);
+    setLinkHistory((prev) => {
+      const next = prev.slice(0, -1);
+      if (next.length > 0) {
+        const prevEntry = next[next.length - 1];
+        setBackButton({ side: prevEntry.chapterPos < entry.chapterPos ? "right" : "left" });
+      } else {
+        setBackButton(null);
+      }
+      return next;
+    });
     setFragmentTarget({ fragment: null, nonce: 0 });
-    goToChapter(entry.chapterPos, entry.fraction);
-  }, [linkHistory, goToChapter]);
+    if (entry.chapterPos === chapterPos) {
+      // Same-chapter back: reposition without remounting PagedChapter.
+      setReposition({ fraction: entry.fraction, nonce: nonceRef.current++ });
+    } else {
+      goToChapter(entry.chapterPos, entry.fraction);
+    }
+  }, [linkHistory, chapterPos, goToChapter]);
 
   const handleTocSelect = useCallback(
     (pos: number) => {
