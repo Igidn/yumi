@@ -22,4 +22,7 @@ contextBridge.exposeInMainWorld("yumi", {
     ipcRenderer.on(event, wrapped);
     return () => ipcRenderer.removeListener(event, wrapped);
   },
+  isFullScreen: (): Promise<boolean> => {
+    return ipcRenderer.invoke("window:isFullScreen");
+  },
 });

@@ -1,6 +1,6 @@
 import fs from "fs";
 import path from "path";
-import { BrowserWindow, dialog, ipcMain, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
 import { eq } from "drizzle-orm";
 import { getDb, hasFts5 } from "./database";
 import { appSettings, books } from "./db/schema";
@@ -246,5 +246,20 @@ export function registerIpcHandlers(): void {
 
   handle("db:fts5", async () => {
     return hasFts5();
+  });
+
+  handle("window:isFullScreen", async (event) => {
+    return BrowserWindow.fromWebContents(event.sender)?.isFullScreen() ?? false;
+  });
+
+  // Forward native fullscreen transitions to the renderer so the reader
+  // header can adjust padding (traffic lights disappear in fullscreen).
+  app.on("browser-window-created", (_, win) => {
+    win.on("enter-full-screen", () => {
+      broadcastEvent("window:enterFullScreen");
+    });
+    win.on("leave-full-screen", () => {
+      broadcastEvent("window:leaveFullScreen");
+    });
   });
 }

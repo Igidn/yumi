@@ -24,7 +24,7 @@ export interface Book {
  * One-way main → renderer notifications. Distinct from `IPCChannel` so the
  * preload bridge can type `on()` separately from the request/response `invoke()`.
  */
-export type YumiEvent = "library:changed";
+export type YumiEvent = "library:changed" | "window:enterFullScreen" | "window:leaveFullScreen";
 
 /** A flat, renderer-ready block extracted from a chapter's XHTML. */
 export interface ContentBlock {
@@ -80,7 +80,8 @@ export type IPCChannel =
   | "import:book"
   | "dialog:openFile"
   | "dialog:openImage"
-  | "db:fts5";
+  | "db:fts5"
+  | "window:isFullScreen";
 
 /** Result of an `import:book` call (SPEC §1 duplicate handling). */
 export type ImportOutcome =
@@ -128,6 +129,7 @@ export interface IPCPayloads {
   "dialog:openFile": void;
   "dialog:openImage": void;
   "db:fts5": void;
+  "window:isFullScreen": void;
 }
 
 export interface IPCResponses {
@@ -145,6 +147,7 @@ export interface IPCResponses {
   "dialog:openFile": string[];
   "dialog:openImage": string | null;
   "db:fts5": boolean;
+  "window:isFullScreen": boolean;
 }
 
 export interface YumiAPI {
@@ -165,6 +168,8 @@ export interface YumiAPI {
     event: E,
     listener: () => void
   ): () => void;
+  /** Check whether the window is in macOS native fullscreen. */
+  isFullScreen: () => Promise<boolean>;
 }
 
 declare global {

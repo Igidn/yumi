@@ -18,6 +18,9 @@ import {
   type ReaderSettings,
 } from "../reader/settings";
 
+/** px from top of viewport considered "hovering the header zone" */
+const HEADER_HOVER_ZONE = 80;
+
 type Panel = "toc" | "search" | null;
 
 interface HistoryEntry {
@@ -53,6 +56,13 @@ export function ReaderView({ bookId }: { bookId: number }) {
   const [backButton, setBackButton] = useState<{
     side: "left" | "right";
   } | null>(null);
+  // Titlebar hover: shows chrome when the cursor is near the top.
+  const [headerVisible, setHeaderVisible] = useState(true);
+  const headerHoverRef = useRef(false);
+  const hideTimer = useRef<number | null>(null);
+  // macOS native fullscreen: traffic lights vanish, move content left.
+  const [isFullScreen, setIsFullScreen] = useState(false);
+  const isMac = window.yumi.platform === "darwin";
 
   const nonceRef = useRef(1);
   const payloadRef = useRef<ReaderPayload | null>(null);
@@ -262,6 +272,53 @@ export function ReaderView({ bookId }: { bookId: number }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [chapterPos, goToChapter]);
 
+  // ---- fullscreen tracking (macOS traffic light visibility) --------
+
+  useEffect(() => {
+    if (!isMac) return;
+    window.yumi.isFullScreen().then(setIsFullScreen);
+    const unlistenEnter = window.yumi.on("window:enterFullScreen", () =>
+      setIsFullScreen(true)
+    );
+    const unlistenLeave = window.yumi.on("window:leaveFullScreen", () =>
+      setIsFullScreen(false)
+    );
+    return () => {
+      unlistenEnter();
+      unlistenLeave();
+    };
+  }, [isMac]);
+
+  // ---- header hover visibility --------------------------------------
+
+  const showHeader = useCallback(() => {
+    headerHoverRef.current = true;
+    setHeaderVisible(true);
+    if (hideTimer.current) {
+      window.clearTimeout(hideTimer.current);
+      hideTimer.current = null;
+    }
+  }, []);
+
+  const hideHeader = useCallback(() => {
+    headerHoverRef.current = false;
+    hideTimer.current = window.setTimeout(() => {
+      if (!headerHoverRef.current) setHeaderVisible(false);
+      hideTimer.current = null;
+    }, 400);
+  }, []);
+
+  const handleHeaderMouseMove = useCallback(
+    (e: React.MouseEvent) => {
+      if (e.clientY <= HEADER_HOVER_ZONE) {
+        showHeader();
+      } else if (headerHoverRef.current && e.clientY > HEADER_HOVER_ZONE + 20) {
+        hideHeader();
+      }
+    },
+    [showHeader, hideHeader]
+  );
+
   // Book-wide page offsets: remeasure every chapter when layout/typography changes.
   // ponytail: sync full-book measure; chunk if 200+ chapter books jank on resize.
   useEffect(() => {
@@ -330,9 +387,20 @@ export function ReaderView({ bookId }: { bookId: number }) {
   return (
     <div
       className={`reader-${theme} flex h-screen flex-col overflow-hidden bg-reader font-ui text-reader`}
+      onMouseMove={handleHeaderMouseMove}
     >
-      {/* Chrome header — drag region for the frameless window */}
-      <header className="app-drag relative z-10 flex h-[52px] shrink-0 items-center justify-between pl-[78px] pr-3">
+      {/* Chrome header — drag region for the frameless window.
+           Shows on hover; left padding adjusts to fullscreen state so the
+           content index slides to where the traffic lights used to be. */}
+      <header
+        className={`app-drag relative z-10 flex h-[52px] shrink-0 items-center justify-between pr-3 transition-all duration-300 ${
+          isMac && !isFullScreen ? "pl-[78px]" : "pl-4"
+        } ${
+          headerVisible
+            ? "pointer-events-auto translate-y-0 opacity-100"
+            : "pointer-events-none -translate-y-full opacity-0"
+        }`}
+      >
         <div className="app-no-drag flex items-center gap-1">
           <button
             onClick={() => {
