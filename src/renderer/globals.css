@@ -185,7 +185,7 @@
 }
 
 .reader-flash {
-  animation: reader-flash 1.6s ease-out;
+  animation: reader-flash 3s ease-out;
   border-radius: 3px;
 }
 
