@@ -131,9 +131,11 @@
 .reader-content img.reader-image {
   display: block;
   max-width: 100%;
+  max-height: 100%;
   height: auto;
   margin: 0.75em auto;
   break-inside: avoid;
+  object-fit: contain;
 }
 
 /* Hyperlinks inside reader content — understated, book-style. */
