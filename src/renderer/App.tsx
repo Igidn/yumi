@@ -120,7 +120,7 @@ export default function App() {
         </div>
       </header>
 
-      <main className="h-full overflow-auto pt-[83px]">
+      <main className="h-full overflow-auto pt-[83px] no-scrollbar">
         {view === "library" && (
           <LibraryView
             onOpenBook={openBook}

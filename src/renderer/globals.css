@@ -74,6 +74,13 @@
   border-color: var(--reader-edge);
 }
 
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 .app-drag {
   -webkit-app-region: drag;
 }
