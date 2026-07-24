@@ -273,6 +273,7 @@ const INLINE_TAG_MAP: Record<string, string> = {
   strong: "strong",
   b: "strong",
   a: "a",
+  span: "span",
 };
 
 function escapeHtmlText(s: string): string {
@@ -301,6 +302,23 @@ function inlineHtml(
     const elId = el.getAttribute("id");
     const idAttr = elId ? ` id="${escapeHtmlText(elId)}"` : "";
     const tag = INLINE_TAG_MAP[local];
+
+    // <span> with inline style or CSS class hints — convert to <em>/<strong>
+    if (tag === "span") {
+      const style = (el.getAttribute("style") || "").toLowerCase();
+      const cls = (el.getAttribute("class") || "").toLowerCase();
+      const inner = inlineHtml(el, linkResolver);
+      if (!inner.trim()) return out;
+      if (/font-style\s*:\s*italic/.test(style) || cls.includes("italic")) {
+        out += `<em${idAttr}>${inner}</em>`;
+      } else if (/font-weight\s*:\s*bold/.test(style) || cls.includes("bold")) {
+        out += `<strong${idAttr}>${inner}</strong>`;
+      } else {
+        out += inner;
+      }
+      continue;
+    }
+
     if (tag === "a" && linkResolver) {
       const href = el.getAttribute("href");
       const inner = inlineHtml(el, linkResolver);
