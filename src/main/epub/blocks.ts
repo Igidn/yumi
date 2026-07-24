@@ -1,6 +1,6 @@
 import type { ContentBlock, LinkTarget } from "./types";
 import { textOf, resolveHref } from "./util";
-import { inlineHtml, collapseInlineHtml, makeBlock } from "./html-serialize";
+import { makeBlock } from "./html-serialize";
 
 // ---------------------------------------------------------------------------
 // Block extraction from XHTML body

@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
-import type { ParsedEpub, EpubCover, EpubMeta } from "./types";
+import type { ParsedEpub, EpubCover, EpubMeta, ContentBlock } from "./types";
+import { MAX_EXTRACTED_IMAGES, MAX_IMAGE_SIZE_BYTES } from "./types";
 import { Epub } from "./epub-class";
 import { loadNav } from "./nav";
 import { extractBlocks, makeLinkResolver } from "./blocks";
@@ -92,11 +93,6 @@ export async function parseEpub(
         ? path.join(getCoversDir(), String(bookId), "images")
         : null;
     if (imageDir) fs.mkdirSync(imageDir, { recursive: true });
-
-    /** Extract image blob from archive (href is already resolved relative to the XHTML doc). */
-    function getImageBlob(href: string): Promise<Blob | null> {
-      return epub.getBlob("/" + href);
-    }
 
     const spineToChapter = new Map<string, number>();
     const chapters: ParsedEpub["chapters"] = [];
@@ -195,8 +191,6 @@ async function extractImages(
   imageMap: Map<string, string>,
 ): Promise<void> {
   if (!imageDir) return;
-  const MAX_EXTRACTED_IMAGES = 500;
-  const MAX_IMAGE_SIZE_BYTES = 50 * 1024 * 1024;
 
   const imgs = doc.getElementsByTagName("img");
   for (let j = 0; j < imgs.length; j++) {
@@ -231,8 +225,8 @@ async function extractBlocksForRange(
   imageMap: Map<string, string>,
   spineToChapter: Map<string, number>,
   chapterIndex: number,
-): Promise<import("../../shared/types").ContentBlock[]> {
-  const allBlocks: import("../../shared/types").ContentBlock[] = [];
+): Promise<ContentBlock[]> {
+  const allBlocks: ContentBlock[] = [];
 
   for (const item of spineItems) {
     if (item.index < startIndex) continue;
@@ -257,7 +251,7 @@ async function extractBlocksForRange(
 }
 
 function attachImageDims(
-  blocks: import("../../shared/types").ContentBlock[],
+  blocks: ContentBlock[],
   imageMap: Map<string, string>,
   imageDir: string | null,
 ): void {
