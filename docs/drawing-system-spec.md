@@ -129,3 +129,69 @@ The renderer only needs one additional method: `addExternalStroke(stroke)` — i
 - **Tab** — an independent canvas inside the drawing panel. Replaces the concept of "page" to avoid confusion with reader pagination.
 - **Cache canvas** — the offscreen bitmap containing all finished strokes. Blitted on pan/zoom for performance.
 - **Panel** — the floating window containing tabs, toolbar, and canvas. One panel per session.
+
+---
+
+## Implementation Steps
+
+### Step 1: Database + IPC wiring
+- Create `drawings.db` with WAL mode in the app's data directory
+- Table: `tabs (id, label, created_at)` + `strokes (id, tab_id, stroke_index, json_data, created_at, updated_at)`
+- IPC handlers: `drawing:load-tabs`, `drawing:load-strokes`, `drawing:stroke-added`, `drawing:stroke-erased`, `drawing:undo`, `drawing:create-tab`, `drawing:rename-tab`, `drawing:delete-tab`, `drawing:clear-tab`
+- Broadcast `drawing:external-stroke` to all windows when a stroke is saved
+- Each stroke gets a `uuid` for dedup across windows
+
+### Step 2: Floating panel shell
+- `FloatingPanel` component: absolute-positioned div, draggable by title bar, resizable from edges/corners
+- Minimum size 200x150, stored position/size remembered across sessions
+- Minimize button (collapses to a floating pill), close button
+- Toggle button (pen icon) in reader header chrome opens/closes the panel
+- Panel lives above reader content, below TOC/search/appearance panels
+
+### Step 3: Tab system
+- Horizontal tab strip inside the panel with "Canvas 1", "Canvas 2", etc.
+- "+" button creates new tab (confirmed in DB)
+- Double-click tab to rename
+- Right-click: rename, delete, duplicate, clear canvas
+- Active tab persisted, restored on re-open
+- Delete/clear filtered through confirmation dialog
+
+### Step 4: Canvas rendering (three-layer)
+- **Background canvas**: static dot grid pattern, redrawn on resize only
+- **Cache canvas**: offscreen — completed strokes rasterized here via `drawImage`. On pan/zoom, blitted at scale+offset
+- **Interaction canvas**: live stroke (current draw) + selected/editing strokes, cleared each frame
+- When a stroke finishes: rasterize to cache → save to DB → broadcast → clear interaction
+- When receiving external stroke: add to state → rasterize to cache
+
+### Step 5: Drawing tools
+- **Pen**: freehand stroke generation using `perfect-freehand` for smoothing. Variable width (1-20px slider)
+- **Eraser**: vector hit-test against stroke bounding boxes, deletes matching strokes
+- **Color picker**: preset swatches (black, red, blue, green, yellow, white) + custom hex input
+- **Toolbar**: horizontal strip above the tab bar
+
+### Step 6: Canvas interactions
+- **Pan**: grab-drag canvas when hand tool active (scrollbars hidden)
+- **Zoom**: scroll wheel or pinch, 25%-400%, percentage indicator, Ctrl+0 to reset
+- **Infinite canvas**: no bounds, strokes can be placed anywhere
+- **Grid toggle**: checkbox or hotkey to show/hide dot grid
+
+### Step 7: Selection + manipulation
+- **Selection tool**: lasso-freehand (reuse `perfect-freehand`) or rectangle select
+- Selected strokes render live on interaction canvas with bounding-box handles
+- **Move**: drag selected strokes
+- **Delete**: Delete key removes selected strokes (broadcast to other windows)
+- Scale/rotate handles on bounding box
+
+### Step 8: Undo/Redo
+- Per-tab undo stack (array of stroke UUIDs)
+- Undo: remove last stroke from cache (re-render cache without it), broadcast removal
+- Redo: re-add stroke to cache, broadcast addition
+- Ctrl+Z / Ctrl+Shift+Z keyboard handling (scoped to when panel is focused)
+
+### Step 9: Polish
+- Panel state (position, size, active tab, minimized) persisted in app settings, not drawings.db
+- Smooth open/close animation (scale-fade)
+- Empty state: "No drawings yet. Start sketching!" with pen illustration
+- Keyboard shortcuts table visible on first open (dismissable)
+- Tool cursor changes (crosshair for pen, circle for eraser, default for hand)
+- Touch/pencil support: pressure sensitivity via PointerEvent.pressure if available
