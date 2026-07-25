@@ -3,7 +3,6 @@ import type {
   IPCChannel,
   IPCPayloads,
   IPCResponses,
-  YumiEvent,
 } from "../shared/types";
 
 contextBridge.exposeInMainWorld("yumi", {
@@ -17,8 +16,9 @@ contextBridge.exposeInMainWorld("yumi", {
     >;
   },
   getPathForFile: (file: File): string => webUtils.getPathForFile(file),
-  on: (event: YumiEvent, listener: () => void): (() => void) => {
-    const wrapped = () => listener();
+  on: (event: string, listener: (...args: any[]) => void): (() => void) => {
+    const wrapped = (_event: Electron.IpcRendererEvent, ...args: any[]) =>
+      listener(...args);
     ipcRenderer.on(event, wrapped);
     return () => ipcRenderer.removeListener(event, wrapped);
   },
