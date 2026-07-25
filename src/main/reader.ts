@@ -181,9 +181,9 @@ export async function saveReaderProgress(payload: {
       .set({ progress: bookProgress })
       .where(eq(books.id, payload.bookId));
   } catch (err) {
-    // ponytail: sql.js has no Drizzle transaction wrapper; a crash between
-    // the two writes leaves progress partially saved, but the re-save on
-    // the next page turn will overwrite the stale value.
+    // ponytail: single-statement writes, no transaction needed; a crash
+    // between the two writes leaves progress partially saved, but the
+    // re-save on the next page turn will overwrite the stale value.
     console.error("[reader] progress save failed:", err);
   }
 }

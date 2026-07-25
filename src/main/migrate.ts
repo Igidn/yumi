@@ -1,32 +1,18 @@
-import initSqlJs from "sql.js";
-import { drizzle } from "drizzle-orm/sql-js";
-import { migrate } from "drizzle-orm/sql-js/migrator";
+import Database from "better-sqlite3";
+import { drizzle } from "drizzle-orm/better-sqlite3";
+import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import path from "path";
-import fs from "fs";
 import { dbPath } from "./paths";
 
 const migrationsFolder = path.join(__dirname, "../../drizzle/migrations");
 
-async function main() {
-  const SQL = await initSqlJs();
+const sqlite = new Database(dbPath);
+sqlite.pragma("journal_mode = WAL");
+sqlite.pragma("foreign_keys = ON");
 
-  let sqlDb: any;
-  if (fs.existsSync(dbPath)) {
-    const buffer = fs.readFileSync(dbPath);
-    sqlDb = new SQL.Database(buffer);
-  } else {
-    sqlDb = new SQL.Database();
-  }
+const db = drizzle(sqlite);
+migrate(db, { migrationsFolder });
+sqlite.close();
 
-  const db = drizzle(sqlDb);
-  await migrate(db, { migrationsFolder });
-
-  fs.mkdirSync(path.dirname(dbPath), { recursive: true });
-  fs.writeFileSync(dbPath, Buffer.from(sqlDb.export()));
-  console.log(`Migrations applied. Database saved to ${dbPath}`);
-}
-
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+console.log(`Migrations applied. Database at ${dbPath}`);
+process.exit(0);

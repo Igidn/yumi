@@ -7,18 +7,20 @@
   "main": "dist/main/index.js",
   "scripts": {
     "dev": "concurrently -n main,renderer -c blue,green \"npm run dev:main\" \"npm run dev:renderer\"",
-    "dev:main": "tsc -p tsconfig.main.json && electron dist/main/index.js",
+    "dev:main": "tsc -p tsconfig.main.json && npm run rebuild && electron dist/main/index.js",
+    "rebuild": "npx @electron/rebuild -f -w better-sqlite3",
     "dev:renderer": "vite",
     "build": "npm run build:renderer && npm run build:main",
     "build:main": "tsc -p tsconfig.main.json",
     "build:renderer": "vite build",
     "package": "npm run build && electron-builder",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "tsx src/main/migrate.ts"
+    "db:migrate": "tsc -p tsconfig.main.json && electron dist/main/migrate.js"
   },
   "dependencies": {
     "@excalidraw/excalidraw": "^0.18.0",
     "@xmldom/xmldom": "^0.9.10",
+    "better-sqlite3": "12.11.1",
     "drizzle-orm": "^0.38.0",
     "electron-store": "^10.0.0",
     "jszip": "^3.10.1",
@@ -26,15 +28,15 @@
     "lucide-react": "^1.26.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "sql.js": "^1.12.0",
     "zustand": "^5.0.0"
   },
   "devDependencies": {
+    "@electron/rebuild": "^4.2.0",
     "@tailwindcss/vite": "^4.0.0",
+    "@types/better-sqlite3": "^7.6.13",
     "@types/katex": "^0.16.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "@types/sql.js": "^1.4.11",
     "concurrently": "^9.0.0",
     "drizzle-kit": "^0.28.0",
     "electron": "^33.0.0",

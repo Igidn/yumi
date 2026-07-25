@@ -104,9 +104,8 @@ export async function importBook(
   const hash = await sha256OfFile(abs);
   const db = await getDb();
 
-  // Use select().limit(1) rather than the relational `findFirst`: drizzle's
-  // sql.js driver returns an all-undefined object (not `undefined`) when no
-  // row matches, which would make a truthiness guard false-positive every import.
+  // select().limit(1)[0] returns undefined when no row matches. Using this
+  // pattern instead of findFirst for consistency with the rest of the codebase.
   const existing = (
     await db.select().from(books).where(eq(books.sha256, hash)).limit(1)
   )[0];
