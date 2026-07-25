@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { GripHorizontal, Minus, X, Pen, Plus, Pencil, Trash2, Copy, Eraser } from "lucide-react";
 import type { DrawingTab } from "../../shared/types";
+import { DrawingCanvas } from "./DrawingCanvas";
 
 interface PanelRect {
   x: number;
@@ -379,7 +380,14 @@ export function FloatingPanel({ isOpen, onClose }: FloatingPanelProps) {
       </div>
 
       {/* ---- canvas area ---- */}
-      <div className="flex-1" style={{ backgroundColor: "#121212" }} />
+      {activeTabId && (
+        <DrawingCanvas
+          key={activeTabId}
+          tabId={activeTabId}
+          activeTool="hand"
+          gridVisible
+        />
+      )}
 
       {/* ---- resize handles ---- */}
       {(["n", "s", "e", "w", "ne", "nw", "se", "sw"] as ResizeDir[]).map((dir) => (
