@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { List, Search, Undo2 } from "lucide-react";
+import { List, Pen, Search, Undo2 } from "lucide-react";
 import type { ReaderPayload } from "../../shared/types";
 import {
   PagedChapter,
@@ -11,6 +11,7 @@ import {
 import { TocPanel } from "../reader/TocPanel";
 import { AppearanceMenu } from "../reader/AppearanceMenu";
 import { SearchPanel } from "../reader/SearchPanel";
+import { FloatingPanel } from "../reader/FloatingPanel";
 import {
   DEFAULT_READER_SETTINGS,
   loadReaderSettings,
@@ -49,6 +50,7 @@ export function ReaderView({ bookId }: { bookId: number }) {
   const [colsByChapter, setColsByChapter] = useState<number[] | null>(null);
   const [panel, setPanel] = useState<Panel>(null);
   const [appearanceOpen, setAppearanceOpen] = useState(false);
+  const [drawingOpen, setDrawingOpen] = useState(false);
   const [jump, setJump] = useState<PageJump | null>(null);
   const [reposition, setReposition] = useState<Reposition | null>(null);
   // Hyperlink history: stack of positions visited before clicking a link.
@@ -438,6 +440,18 @@ export function ReaderView({ bookId }: { bookId: number }) {
 
         <div className="app-no-drag flex items-center gap-1">
           <button
+            onClick={() => setDrawingOpen((v) => !v)}
+            className={`rounded-[6px] p-1.5 transition-colors ${
+              drawingOpen
+                ? "text-reader"
+                : "text-reader-muted hover:text-reader"
+            }`}
+            aria-label="Drawing panel"
+            aria-pressed={drawingOpen}
+          >
+            <Pen size={17} strokeWidth={1.75} />
+          </button>
+          <button
             onClick={() => {
               setPanel(null);
               setAppearanceOpen((v) => !v);
@@ -559,6 +573,12 @@ export function ReaderView({ bookId }: { bookId: number }) {
           onClose={() => setAppearanceOpen(false)}
         />
       )}
+
+      {/* Drawing panel */}
+      <FloatingPanel
+        isOpen={drawingOpen}
+        onClose={() => setDrawingOpen(false)}
+      />
     </div>
   );
 }

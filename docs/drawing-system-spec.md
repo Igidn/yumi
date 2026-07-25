@@ -119,7 +119,7 @@ The renderer only needs one additional method: `addExternalStroke(stroke)` — i
 
 ### Panel Toggle
 
-- Button in reader chrome (pen icon) toggles the drawing panel.
+- Button in reader chrome (pen icon located on the left-side of appearance icon, use lucide icon) toggles the drawing panel.
 - Panel remembers its last position, size, and active tab.
 - If closed and re-opened, restores previous state.
 
@@ -151,7 +151,7 @@ The renderer only needs one additional method: `addExternalStroke(stroke)` — i
 ### Step 3: Tab system
 - Horizontal tab strip inside the panel with "Canvas 1", "Canvas 2", etc.
 - "+" button creates new tab (confirmed in DB)
-- Double-click tab to rename
+- Double-click tab to rename (In-line edit)
 - Right-click: rename, delete, duplicate, clear canvas
 - Active tab persisted, restored on re-open
 - Delete/clear filtered through confirmation dialog
