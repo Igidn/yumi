@@ -46,9 +46,11 @@ function pickPersistedAppState(appState: AppState): Record<string, unknown> {
 }
 
 /** Defaults for a fresh canvas (dark notepad on the panel's glass). */
+// viewBackgroundColor is stored in light-mode form; the dark theme
+// filter (invert 93% + hue-rotate 180°) maps #ffffff → ~#121212.
 const DEFAULT_SCENE_APP_STATE: Record<string, unknown> = {
   theme: "dark",
-  viewBackgroundColor: "#121212",
+  viewBackgroundColor: "#ffffff",
   gridModeEnabled: false,
   currentItemStrokeColor: "#1e1e1e",
 };
