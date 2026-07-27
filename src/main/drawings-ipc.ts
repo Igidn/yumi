@@ -1,10 +1,8 @@
 import { ipcMain, BrowserWindow } from "electron";
 import {
   loadTabs,
-  loadStrokes,
-  addStroke,
-  eraseStrokes,
-  undoLastStroke,
+  loadScene,
+  saveScene,
   createTab,
   renameTab,
   deleteTab,
@@ -12,10 +10,11 @@ import {
 } from "./drawings-db";
 
 /**
- * Broadcast a drawing event to all windows except the sender.
- * Each renderer filters by tabId and deduplicates by stroke UUID.
+ * Broadcast a drawing event to all windows except the sender. The scene blob
+ * is authoritative, so a single `drawing:scene-updated` event covers every
+ * mutation — receiving windows apply it with Excalidraw's updateScene.
  */
-function broadcastToAll(
+function broadcastToOthers(
   channel: string,
   data: unknown,
   sender?: Electron.WebContents
@@ -32,44 +31,22 @@ export function registerDrawingIpcHandlers(): void {
     return loadTabs();
   });
 
-  ipcMain.handle("drawing:load-strokes", async (_, payload: { tabId: string }) => {
-    return loadStrokes(payload.tabId);
-  });
-
   ipcMain.handle(
-    "drawing:stroke-added",
-    async (event, payload: { tabId: string; stroke: import("../shared/types").SerializedStroke }) => {
-      const stroke = addStroke(payload.tabId, payload.stroke);
-
-      broadcastToAll("drawing:external-stroke", {
-        tabId: payload.tabId,
-        stroke,
-      }, event.sender);
+    "drawing:load-scene",
+    async (_, payload: { tabId: string }) => {
+      return loadScene(payload.tabId);
     }
   );
 
   ipcMain.handle(
-    "drawing:stroke-erased",
-    async (event, payload: { tabId: string; strokeIds: string[] }) => {
-      const removed = eraseStrokes(payload.tabId, payload.strokeIds);
-      broadcastToAll("drawing:external-strokes-removed", {
-        tabId: payload.tabId,
-        strokeIds: removed,
-      }, event.sender);
-    }
-  );
-
-  ipcMain.handle(
-    "drawing:undo",
-    async (event, payload: { tabId: string }) => {
-      const result = undoLastStroke(payload.tabId);
-      if (result) {
-        broadcastToAll("drawing:external-strokes-removed", {
-          tabId: payload.tabId,
-          strokeIds: [result.strokeId],
-        }, event.sender);
-      }
-      return result;
+    "drawing:save-scene",
+    async (event, payload: { tabId: string; sceneData: string }) => {
+      saveScene(payload.tabId, payload.sceneData);
+      broadcastToOthers(
+        "drawing:scene-updated",
+        { tabId: payload.tabId, sceneData: payload.sceneData },
+        event.sender
+      );
     }
   );
 
@@ -95,9 +72,11 @@ export function registerDrawingIpcHandlers(): void {
     "drawing:clear-tab",
     async (event, payload: { tabId: string }) => {
       clearTab(payload.tabId);
-      broadcastToAll("drawing:external-tab-cleared", {
-        tabId: payload.tabId,
-      }, event.sender);
+      broadcastToOthers(
+        "drawing:scene-updated",
+        { tabId: payload.tabId, sceneData: null },
+        event.sender
+      );
     }
   );
 }

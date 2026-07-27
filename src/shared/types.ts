@@ -28,9 +28,7 @@ export type YumiEvent =
   | "library:changed"
   | "window:enterFullScreen"
   | "window:leaveFullScreen"
-  | "drawing:external-stroke"
-  | "drawing:external-strokes-removed"
-  | "drawing:external-tab-cleared";
+  | "drawing:scene-updated";
 
 // --- Drawing system types ---
 
@@ -40,22 +38,14 @@ export interface DrawingTab {
   createdAt: string;
 }
 
-export interface SerializedStroke {
-  uuid: string;
-  tool: string;
-  color: string;
-  width: number;
-  points: { x: number; y: number }[];
-  bbox: { x: number; y: number; w: number; h: number };
-}
-
-export interface DrawingStroke {
-  id: string;
-  tabId: string;
-  strokeIndex: number;
-  jsonData: string;
-  createdAt: string;
-  updatedAt: string;
+/**
+ * Serialized Excalidraw scene, stored as a JSON string in `tabs.scene_data`.
+ * Loosely typed here because `shared/` is consumed by the main process too;
+ * the renderer restores it into real Excalidraw types.
+ */
+export interface SceneBlob {
+  elements: readonly unknown[];
+  appState: Record<string, unknown>;
 }
 
 /** A flat, renderer-ready block extracted from a chapter's XHTML. */
@@ -115,10 +105,8 @@ export type IPCChannel =
   | "db:fts5"
   | "window:isFullScreen"
   | "drawing:load-tabs"
-  | "drawing:load-strokes"
-  | "drawing:stroke-added"
-  | "drawing:stroke-erased"
-  | "drawing:undo"
+  | "drawing:load-scene"
+  | "drawing:save-scene"
   | "drawing:create-tab"
   | "drawing:rename-tab"
   | "drawing:delete-tab"
@@ -172,10 +160,8 @@ export interface IPCPayloads {
   "db:fts5": void;
   "window:isFullScreen": void;
   "drawing:load-tabs": void;
-  "drawing:load-strokes": { tabId: string };
-  "drawing:stroke-added": { tabId: string; stroke: SerializedStroke };
-  "drawing:stroke-erased": { tabId: string; strokeIds: string[] };
-  "drawing:undo": { tabId: string };
+  "drawing:load-scene": { tabId: string };
+  "drawing:save-scene": { tabId: string; sceneData: string };
   "drawing:create-tab": { label: string };
   "drawing:rename-tab": { tabId: string; label: string };
   "drawing:delete-tab": { tabId: string };
@@ -199,10 +185,8 @@ export interface IPCResponses {
   "db:fts5": boolean;
   "window:isFullScreen": boolean;
   "drawing:load-tabs": DrawingTab[];
-  "drawing:load-strokes": DrawingStroke[];
-  "drawing:stroke-added": void;
-  "drawing:stroke-erased": void;
-  "drawing:undo": { strokeId: string } | null;
+  "drawing:load-scene": string | null;
+  "drawing:save-scene": void;
   "drawing:create-tab": DrawingTab;
   "drawing:rename-tab": void;
   "drawing:delete-tab": void;

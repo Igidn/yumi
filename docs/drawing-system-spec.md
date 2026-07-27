@@ -4,20 +4,23 @@
 
 A floating, tabbed drawing panel that overlays the reader. Not inline annotations tied to text — a freeform notepad the user can position anywhere, persist across books and sessions, and use for handwritten notes, sketches, or marginalia.
 
+Uses the [`@excalidraw/excalidraw`](https://www.npmjs.com/package/@excalidraw/excalidraw) React component for the drawing surface. The package provides an infinite canvas, tools (pen, eraser, selection, shapes, text), undo/redo, zoom/pan, grid, and keyboard shortcuts out of the box.
+
 ## Pipeline / Data Flow
 
 ```
-User draws → live stroke (vector) on interaction canvas
-Stroke ends → rasterize to offscreen bitmap cache
-                   ↓
-             store stroke data (points, tool, color, width)
-             in database alongside bitmap thumbnail
-                   ↓
-Pan/zoom → blit cached bitmap (instant)
-Select/tap → load vector data, render live, allow edit
+User draws → Excalidraw component (all rendering internal)
+              ↓
+onChange fires → debounce 500ms
+              ↓
+        save { elements, appState } scene blob to SQLite
+              ↓
+        broadcast to other windows (same tab)
+              ↓
+        external window: load scene blob → set Excalidraw initialData
 ```
 
-On re-open: load all strokes → composite into cache bitmap in one pass → ready to render.
+On re-open: load scene blob for active tab → pass as `initialData` to `<Excalidraw>` → ready.
 
 ## Features
 
@@ -41,81 +44,64 @@ Inside the panel, a horizontal tab strip allows multiple independent canvases.
 - Tabs persist across sessions. Opening a different book does not close or change the panel.
 - Active tab is remembered per-session (re-opens to last-used tab).
 
-### Drawing Tools
+### Drawing Tools (all provided by Excalidraw)
 
-Toolbar sits at the top of the panel (above the tab strip or inside each tab).
+Excalidraw's built-in toolbar covers all required tools. The component ships with:
 
-| Tool | Behavior |
-|------|----------|
-| **Pen** | Freehand drawing. Variable width controlled by slider (1–20px). Anti-aliased. |
-| **Eraser** | Deletes entire strokes the eraser path intersects (vector hit-test). Not a pixel eraser. Has larger effective radius than pen. |
-| **Color picker** | Preset palette (black, red, blue, green, yellow, white) plus custom hex input. Per-stroke color. |
-| **Selection** | Lasso or rectangle select. Selected strokes can be moved, resized (scale handles), or deleted. |
-| **Undo** | Reverts last stroke (Ctrl+Z / Cmd+Z). Unlimited undo stack per tab. |
-| **Redo** | Re-applies undone stroke (Ctrl+Shift+Z). |
-| **Clear canvas** | Removes all strokes from current tab (with confirmation). |
-| **Hand/Pan** | Grab-and-drag to pan the canvas when zoomed in. |
+| Tool | Notes |
+|------|-------|
+| **Pen / freehand** | Anti-aliased freehand with configurable stroke width, smoothing, and pressure support. |
+| **Eraser** | Vector eraser — deletes elements the eraser path intersects. |
+| **Shapes** | Rectangle, ellipse, diamond, arrow, line. Bonus — not in original spec. |
+| **Text** | Text labels with font size control. Bonus — not in original spec. |
+| **Color picker** | Preset palette + custom hex input. Per-element stroke and fill colors. |
+| **Selection** | Rectangle select. Move, resize, rotate, duplicate, delete selected elements. |
+| **Undo/Redo** | Built-in, unlimited stack. Ctrl+Z / Ctrl+Shift+Z. |
+| **Hand/Pan** | Grab-to-pan (hold Space or select hand tool). |
+| **Zoom** | Scroll wheel / pinch, 10%–3000% range, zoom controls in toolbar. |
 
-### Canvas Behavior
+We configure `UIOptions` to hide Excalidraw's top bar (its own header/library buttons) and keep only the toolbar relevant to a notepad use case.
 
-- Infinite canvas within the panel viewport — pan to scroll, zoom with scroll wheel or pinch.
-- Grid background (subtle dot grid, optional, toggleable).
-- Zoom level displayed as percentage (25%–400%), reset button to 100%.
-- Canvas dimensions: infinite in all directions. Strokes can extend beyond the visible viewport.
-- No per-page anchoring. The canvas is independent of reader pagination.
+### Canvas Behavior (all provided by Excalidraw)
+
+- Infinite canvas — pan and zoom freely.
+- Dot grid background (toggleable via `appState.gridModeEnabled`).
+- Zoom controls and percentage indicator in the built-in footer.
+- Canvas is independent of reader pagination.
 
 ### Rendering Architecture
 
-Three-layer canvas stack:
-
-1. **Background canvas** — grid dots, static. Redrawn on resize only.
-2. **Cache canvas** — completed strokes rasterized as a bitmap. On pan/zoom, `drawImage` blits this; no curve math.
-3. **Interaction canvas** — the live stroke being drawn, plus any selected/editing strokes. Cleared and redrawn each frame during active drawing.
-
-**When a stroke finishes:**
-- Rasterize it onto the cache canvas.
-- Add its vector data (points, tool, color, width, bounding box) to the stroke list.
-- Clear the interaction canvas.
-
-**When a stroke is selected:**
-- Remove it from the cache canvas (re-render cache without it).
-- Draw it live on the interaction canvas with selection handles.
-- On deselect: rasterize back to cache.
-
-**When panning/zooming:**
-- Scale and re-blit the cache canvas. Instant — no per-stroke computation.
+Handled entirely by Excalidraw's internal canvas. No custom canvas stack needed. The component renders to a single `<canvas>` and optimizes repaints internally.
 
 ### Persistence & Multi-Window Sync
 
-- Strokes stored per tab, not per book.
-- One SQLite table: `drawings (id, tab_id, stroke_index, json_data, created_at, updated_at)`.
-- `json_data` stores the serialized stroke: `{ uuid, tool, color, width, points: [{x,y}...], bbox: {x,y,w,h} }`.
-- On panel open: load all strokes for active tab → composite cache in one pass.
-- Auto-save after each stroke completes (debounced 500ms).
-- Thumbnail generation: downscaled bitmap of the first ~20 strokes for tab previews.
+- Scene stored per tab, not per book.
+- One SQLite table: `tabs (id, label, created_at, scene_data TEXT)`.
+- `scene_data` stores the full Excalidraw scene as JSON: `{ elements: ExcalidrawElement[], appState: { scrollX, scrollY, zoom, ... } }`.
+- On panel open: load scene blob for active tab → pass as `initialData`.
+- Auto-save on every `onChange` from Excalidraw (debounced 500ms).
 
-**Multi-window sync:** When the same tab is open in two reader windows (two books with the same drawing panel), changes propagate in real time:
+**Multi-window sync:** When the same tab is open in two reader windows, changes propagate:
 
-1. User completes a stroke → renderer A adds it locally, sends `drawing:stroke-added` to main process.
-2. Main process saves to SQLite, broadcasts to all windows with that tab loaded.
-3. Renderer B receives the stroke (filtering out its own by uuid) → adds it to state → rasterizes onto cache canvas.
-4. Erase/undo/clear follow the same broadcast pattern.
+1. User draws → Excalidraw fires `onChange` → renderer A debounce-saves scene blob to main process via `drawing:save-scene`.
+2. Main process writes to SQLite, broadcasts `drawing:scene-updated` with the new scene blob to all other windows.
+3. Renderer B receives the scene blob → calls `updateScene({ elements, appState })` on the Excalidraw component ref to apply changes without remounting.
 
-The renderer only needs one additional method: `addExternalStroke(stroke)` — it does the same thing as completing a local stroke but skips the IPC send.
+Since the scene blob is small (vector data, not bitmaps), full-scene sync is fine.
 
-### Keyboard Shortcuts
+### Keyboard Shortcuts (all built into Excalidraw)
 
 | Shortcut | Action |
 |----------|--------|
-| `B` | Pen tool |
-| `E` | Eraser tool |
-| `V` | Selection tool |
-| `H` | Hand/pan tool |
+| `1` / `2` / `3` etc. | Switch tools quickly |
 | `Ctrl+Z` | Undo |
 | `Ctrl+Shift+Z` | Redo |
-| `Delete` | Delete selected strokes |
+| `Delete` / `Backspace` | Delete selected elements |
 | `Ctrl++` / `Ctrl+-` | Zoom in/out |
-| `Ctrl+0` | Reset zoom to 100% |
+| `Ctrl+0` | Reset zoom |
+| `Space` (hold) | Temporarily switch to hand/pan tool |
+
+See [Excalidraw keyboard shortcuts docs](https://github.com/excalidraw/excalidraw#keyboard-shortcuts) for the full list.
 
 ### Panel Toggle
 
@@ -125,73 +111,142 @@ The renderer only needs one additional method: `addExternalStroke(stroke)` — i
 
 ## Terminology
 
-- **Stroke** — a single continuous line drawn between pointer-down and pointer-up. Has tool, color, width, and an array of points.
-- **Tab** — an independent canvas inside the drawing panel. Replaces the concept of "page" to avoid confusion with reader pagination.
-- **Cache canvas** — the offscreen bitmap containing all finished strokes. Blitted on pan/zoom for performance.
-- **Panel** — the floating window containing tabs, toolbar, and canvas. One panel per session.
+- **Element** — any object on the Excalidraw canvas (freehand stroke, shape, text, arrow, image). Excalidraw's internal data model.
+- **Scene** — the full serializable state of an Excalidraw canvas: `{ elements: ExcalidrawElement[], appState: ... }`. Stored as a JSON blob.
+- **Tab** — an independent canvas inside the drawing panel. Each tab has its own scene blob.
+- **Panel** — the floating window containing tabs and the Excalidraw component. One panel per session.
 
 ---
 
 ## Implementation Steps
 
-### Step 1: Database + IPC wiring
-- Create `drawings.db` with WAL mode in the app's data directory
-- Table: `tabs (id, label, created_at)` + `strokes (id, tab_id, stroke_index, json_data, created_at, updated_at)`
-- IPC handlers: `drawing:load-tabs`, `drawing:load-strokes`, `drawing:stroke-added`, `drawing:stroke-erased`, `drawing:undo`, `drawing:create-tab`, `drawing:rename-tab`, `drawing:delete-tab`, `drawing:clear-tab`
-- Broadcast `drawing:external-stroke` to all windows when a stroke is saved
-- Each stroke gets a `uuid` for dedup across windows
+### Step 1: Simplify database + IPC
 
-### Step 2: Floating panel shell
-- `FloatingPanel` component: absolute-positioned div, draggable by title bar, resizable from edges/corners
-- Minimum size 200x150, stored position/size remembered across sessions
-- Minimize button (collapses to a floating pill), close button
-- Toggle button (pen icon) in reader header chrome opens/closes the panel
-- Panel lives above reader content, below TOC/search/appearance panels
+**Schema** — replace `strokes` table with a `scene_data TEXT` column on `tabs`:
 
-### Step 3: Tab system
-- Horizontal tab strip inside the panel with "Canvas 1", "Canvas 2", etc.
-- "+" button creates new tab (confirmed in DB)
-- Double-click tab to rename (In-line edit)
-- Right-click: rename, delete, duplicate, clear canvas
-- Active tab persisted, restored on re-open
-- Delete/clear filtered through confirmation dialog
+```sql
+CREATE TABLE IF NOT EXISTS tabs (
+  id TEXT PRIMARY KEY,
+  label TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  scene_data TEXT  -- JSON: { elements, appState }
+);
+```
 
-### Step 4: Canvas rendering (three-layer)
-- **Background canvas**: static dot grid pattern, redrawn on resize only
-- **Cache canvas**: offscreen — completed strokes rasterized here via `drawImage`. On pan/zoom, blitted at scale+offset
-- **Interaction canvas**: live stroke (current draw) + selected/editing strokes, cleared each frame
-- When a stroke finishes: rasterize to cache → save to DB → broadcast → clear interaction
-- When receiving external stroke: add to state → rasterize to cache
+**IPC channels** (reduced from 12 to 7):
+- `drawing:load-tabs` → returns all tabs (labels, ids; scene_data excluded for list view)
+- `drawing:load-scene` → returns scene_data for one tab
+- `drawing:save-scene` → upserts scene_data + broadcasts `drawing:scene-updated`
+- `drawing:create-tab` → inserts new tab with empty scene_data
+- `drawing:rename-tab`
+- `drawing:delete-tab`
+- `drawing:clear-tab` → sets scene_data to null + broadcasts
 
-### Step 5: Drawing tools
-- **Pen**: freehand stroke generation using `perfect-freehand` for smoothing. Variable width (1-20px slider)
-- **Eraser**: vector hit-test against stroke bounding boxes, deletes matching strokes
-- **Color picker**: preset swatches (black, red, blue, green, yellow, white) + custom hex input
-- **Toolbar**: horizontal strip above the tab bar
+**Multi-window broadcast** — single event: `drawing:scene-updated` with `{ tabId, sceneData }`. No per-stroke dedup needed; the scene blob is authoritative.
 
-### Step 6: Canvas interactions
-- **Pan**: grab-drag canvas when hand tool active (scrollbars hidden)
-- **Zoom**: scroll wheel or pinch, 25%-400%, percentage indicator, Ctrl+0 to reset
-- **Infinite canvas**: no bounds, strokes can be placed anywhere
-- **Grid toggle**: checkbox or hotkey to show/hide dot grid
+### Step 2: Floating panel shell (unchanged from current impl)
 
-### Step 7: Selection + manipulation
-- **Selection tool**: lasso-freehand (reuse `perfect-freehand`) or rectangle select
-- Selected strokes render live on interaction canvas with bounding-box handles
-- **Move**: drag selected strokes
-- **Delete**: Delete key removes selected strokes (broadcast to other windows)
-- Scale/rotate handles on bounding box
+Already implemented in `FloatingPanel.tsx`:
+- Draggable by title bar, resizable from edges/corners, min 200×150
+- Minimize (to pill), close, toggle button in reader header
+- Position/size persisted via `localStorage`
 
-### Step 8: Undo/Redo
-- Per-tab undo stack (array of stroke UUIDs)
-- Undo: remove last stroke from cache (re-render cache without it), broadcast removal
-- Redo: re-add stroke to cache, broadcast addition
-- Ctrl+Z / Ctrl+Shift+Z keyboard handling (scoped to when panel is focused)
+### Step 3: Tab system (unchanged from current impl)
 
-### Step 9: Polish
-- Panel state (position, size, active tab, minimized) persisted in app settings, not drawings.db
-- Smooth open/close animation (scale-fade)
-- Empty state: "No drawings yet. Start sketching!" with pen illustration
-- Keyboard shortcuts table visible on first open (dismissable)
-- Tool cursor changes (crosshair for pen, circle for eraser, default for hand)
-- Touch/pencil support: pressure sensitivity via PointerEvent.pressure if available
+Already implemented:
+- Horizontal tab strip, "+" button, double-click rename, right-click context menu
+- Active tab persisted via `localStorage`
+
+### Step 4: Integrate Excalidraw component
+
+Replace `<DrawingCanvas>` with `<Excalidraw>` in `FloatingPanel.tsx`:
+
+```tsx
+import { Excalidraw } from "@excalidraw/excalidraw";
+import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types/types";
+
+// Inside FloatingPanel, per active tab:
+const excalidrawRef = useRef<ExcalidrawImperativeAPI>(null);
+const [sceneData, setSceneData] = useState<SceneBlob | null>(null);
+
+// Load scene on tab switch
+useEffect(() => {
+  window.yumi.invoke("drawing:load-scene", { tabId: activeTabId })
+    .then(data => setSceneData(data ? JSON.parse(data) : null));
+}, [activeTabId]);
+
+// Debounced save on change
+const saveScene = useCallback(debounce(async (elements, appState) => {
+  await window.yumi.invoke("drawing:save-scene", {
+    tabId: activeTabId,
+    sceneData: JSON.stringify({ elements, appState }),
+  });
+}, 500), [activeTabId]);
+
+// Listen for external scene updates
+useEffect(() => {
+  const unsub = window.yumi.on("drawing:scene-updated", (data) => {
+    if (data.tabId !== activeTabId) return;
+    const scene = JSON.parse(data.sceneData);
+    excalidrawRef.current?.updateScene({ elements: scene.elements, appState: scene.appState });
+  });
+  return unsub;
+}, [activeTabId]);
+
+return (
+  <Excalidraw
+    key={activeTabId}
+    ref={excalidrawRef}
+    initialData={sceneData ?? { elements: [], appState: { viewBackgroundColor: "transparent" } }}
+    onChange={(data) => saveScene(data.elements, data.appState)}
+    UIOptions={{
+      canvasActions: {
+        export: false,
+        loadScene: false,
+        saveAsImage: false,
+      },
+    }}
+  />
+);
+```
+
+**Config notes:**
+- `key={activeTabId}` forces remount on tab switch (trashes Excalidraw's internal undo stack per tab — correct behavior).
+- `UIOptions` hides Excalidraw's top-left menu and library button. Keep the toolbar.
+- `viewBackgroundColor: "transparent"` so the panel background shows through.
+- Excalidraw's own toolbar renders inside the component — no separate toolbar component needed.
+
+### Step 5: Excalidraw theme
+
+Match Excalidraw's theme to the reader theme. The reader uses a dark background; configure Excalidraw with:
+
+```tsx
+<Excalidraw
+  theme="dark"
+  initialData={{
+    appState: {
+      theme: "dark",
+      viewBackgroundColor: "transparent",
+      currentItemStrokeColor: "#ffffff",
+    },
+  }}
+/>
+```
+
+### Step 6: Polish
+
+- Panel state (position, size, active tab, minimized) — already persisted via `localStorage`.
+- Smooth open/close animation — CSS transition on the panel container.
+- Empty state — Excalidraw's canvas is inherently empty by default; no custom empty state needed.
+- Excalidraw handles all tool cursors, touch/pen pressure, and keyboard shortcuts automatically.
+- Tab duplicate: load source scene, `create-tab` + `save-scene` with the same data.
+
+### Step 7: Remove custom canvas code
+
+Delete or archive:
+- `src/renderer/reader/DrawingCanvas.tsx` — replaced by `<Excalidraw>`
+- `src/main/drawings-db.ts` — replace `strokes` table logic with scene blob CRUD
+- `src/main/drawings-ipc.ts` — simplify to 7 scene-based IPC handlers
+- `src/shared/types.ts` — remove `SerializedStroke`, `DrawingStroke`; add `SceneBlob` type
+- `perfect-freehand` dependency — remove from `package.json` (not needed; Excalidraw bundles its own smoothing)
+

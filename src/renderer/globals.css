@@ -216,3 +216,17 @@
   from { opacity: 0; }
   to { opacity: 1; }
 }
+
+/* Excalidraw inside the drawing panel: strip its app-level chrome (top-left
+   main menu, top-right library button, sidebar) and keep only the toolbar
+   and zoom footer — the panel is a notepad, not a full Excalidraw app. */
+.yumi-excalidraw .excalidraw .main-menu-trigger,
+.yumi-excalidraw .excalidraw .sidebar-trigger,
+.yumi-excalidraw .excalidraw .default-sidebar {
+  display: none !important;
+}
+
+/* Transparent canvas: let the panel's glass background show through. */
+.yumi-excalidraw .excalidraw {
+  background: transparent;
+}

@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { GripHorizontal, Minus, X, Pen, Plus, Pencil, Trash2, Copy, Eraser } from "lucide-react";
 import type { DrawingTab } from "../../shared/types";
-import { DrawingCanvas } from "./DrawingCanvas";
+import { DrawingSurface } from "./DrawingSurface";
 
 interface PanelRect {
   x: number;
@@ -80,6 +80,9 @@ export function FloatingPanel({ isOpen, onClose }: FloatingPanelProps) {
   const [editingTabId, setEditingTabId] = useState<string | null>(null);
   const [editingLabel, setEditingLabel] = useState("");
   const [ctxMenu, setCtxMenu] = useState<ContextMenuState | null>(null);
+  // Bumped to force-remount the canvas after a local "clear canvas" (the
+  // scene-updated broadcast skips the sending window).
+  const [canvasNonce, setCanvasNonce] = useState(0);
   const editInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -175,28 +178,31 @@ export function FloatingPanel({ isOpen, onClose }: FloatingPanelProps) {
     const src = tabs.find((t) => t.id === tabId);
     if (!src) return;
 
+    const sceneData = await window.yumi.invoke("drawing:load-scene", { tabId });
     const newTab = await window.yumi.invoke("drawing:create-tab", {
       label: `${src.label} (copy)`,
     });
-    setTabs((prev) => [...prev, newTab]);
-    setActiveTabId(newTab.id);
-
-    // Copy strokes from source tab to new tab.
-    const strokes = await window.yumi.invoke("drawing:load-strokes", { tabId });
-    for (const s of strokes) {
-      const data = JSON.parse(s.jsonData);
-      await window.yumi.invoke("drawing:stroke-added", {
+    if (sceneData) {
+      await window.yumi.invoke("drawing:save-scene", {
         tabId: newTab.id,
-        stroke: data,
+        sceneData,
       });
     }
+    setTabs((prev) => [...prev, newTab]);
+    setActiveTabId(newTab.id);
   }, [tabs]);
 
-  const handleClearTab = useCallback(async (tabId: string) => {
-    setCtxMenu(null);
-    if (!window.confirm("Clear all drawings from this canvas?")) return;
-    await window.yumi.invoke("drawing:clear-tab", { tabId });
-  }, []);
+  const handleClearTab = useCallback(
+    async (tabId: string) => {
+      setCtxMenu(null);
+      if (!window.confirm("Clear all drawings from this canvas?")) return;
+      await window.yumi.invoke("drawing:clear-tab", { tabId });
+      // The broadcast skips the sender, so remount the local canvas to show
+      // the now-empty scene when the cleared tab is the visible one.
+      if (tabId === activeTabId) setCanvasNonce((n) => n + 1);
+    },
+    [activeTabId]
+  );
 
   const onDragStart = useCallback(
     (e: React.PointerEvent) => {
@@ -381,11 +387,9 @@ export function FloatingPanel({ isOpen, onClose }: FloatingPanelProps) {
 
       {/* ---- canvas area ---- */}
       {activeTabId && (
-        <DrawingCanvas
-          key={activeTabId}
+        <DrawingSurface
+          key={`${activeTabId}:${canvasNonce}`}
           tabId={activeTabId}
-          activeTool="hand"
-          gridVisible
         />
       )}
 
