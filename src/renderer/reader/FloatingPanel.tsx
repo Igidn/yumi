@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import { GripHorizontal, Minus, X, Pen, Plus, Pencil, Trash2, Copy, Eraser } from "lucide-react";
+import { Minus, X, Pen, Plus, Pencil, Trash2, Copy, Eraser } from "lucide-react";
 import type { DrawingTab } from "../../shared/types";
 import { DrawingSurface } from "./DrawingSurface";
 
@@ -297,7 +297,7 @@ export function FloatingPanel({ isOpen, onClose }: FloatingPanelProps) {
   return (
     <>
       <div
-        className="fixed z-[25] flex flex-col overflow-hidden rounded-[10px] border border-reader-edge shadow-[0_8px_32px_rgba(0,0,0,0.45)]"
+        className="fixed z-[25] flex flex-col overflow-hidden rounded-[12px] border border-reader-edge shadow-[0_8px_32px_rgba(0,0,0,0.45)]"
         style={{
           left: rect.x,
           top: rect.y,
@@ -306,37 +306,33 @@ export function FloatingPanel({ isOpen, onClose }: FloatingPanelProps) {
           backgroundColor: "#121212",
         }}
       >
-      {/* ---- title bar (drag handle) ---- */}
+      {/* ---- header: identity chip, pill tabs, window controls.
+               One row (the whole empty area is the drag region) so the
+               canvas keeps as much vertical space as possible. ---- */}
       <div
-        className="flex h-[38px] shrink-0 cursor-grab select-none items-center gap-2 border-b border-reader-edge px-2 active:cursor-grabbing"
+        className="flex h-10 shrink-0 cursor-grab select-none items-center gap-1 border-b border-white/[0.06] bg-[#171512] pl-2.5 pr-1.5 active:cursor-grabbing"
         onPointerDown={onDragStart}
       >
-        <GripHorizontal size={14} strokeWidth={1.75} className="text-reader-muted" />
-        <span className="flex-1 text-[12px] font-medium text-reader-muted">
-          Drawings
-        </span>
-
-        <button
-          onPointerDown={(e) => e.stopPropagation()}
-          onClick={() => setMinimized(true)}
-          className="rounded-[5px] p-1 text-reader-muted transition-colors hover:bg-reader-edge/50 hover:text-reader"
-          aria-label="Minimize drawing panel"
+        <div
+          className="mr-1 flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-[6px]"
+          style={{
+            backgroundColor:
+              "color-mix(in srgb, var(--reader-accent) 18%, transparent)",
+          }}
+          title="Drawings"
         >
-          <Minus size={14} strokeWidth={2} />
-        </button>
-        <button
-          onPointerDown={(e) => e.stopPropagation()}
-          onClick={() => onClose()}
-          className="rounded-[5px] p-1 text-reader-muted transition-colors hover:bg-reader-edge/50 hover:text-reader"
-          aria-label="Close drawing panel"
-        >
-          <X size={14} strokeWidth={2} />
-        </button>
-      </div>
+          <Pen
+            size={12}
+            strokeWidth={2}
+            style={{ color: "var(--reader-accent)" }}
+          />
+        </div>
 
-      {/* ---- tab strip ---- */}
-      <div className="flex shrink-0 items-center border-b border-reader-edge bg-[#1a1a1a]">
-        <div className="flex min-w-0 flex-1 items-center overflow-x-auto no-scrollbar">
+        {/* pill tabs (scrollable); empty strip space stays draggable */}
+        <div
+          role="tablist"
+          className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto no-scrollbar"
+        >
           {tabs.map((tab) => {
             const isActive = tab.id === activeTabId;
             const isEditing = tab.id === editingTabId;
@@ -344,16 +340,20 @@ export function FloatingPanel({ isOpen, onClose }: FloatingPanelProps) {
             return (
               <div
                 key={tab.id}
+                role="tab"
+                aria-selected={isActive}
+                title={isEditing ? undefined : tab.label}
+                onPointerDown={(e) => e.stopPropagation()}
                 onClick={() => setActiveTabId(tab.id)}
                 onDoubleClick={() => handleRenameStart(tab)}
                 onContextMenu={(e) => {
                   e.preventDefault();
                   setCtxMenu({ tabId: tab.id, x: e.clientX, y: e.clientY });
                 }}
-                className={`group relative flex h-[32px] shrink-0 cursor-pointer select-none items-center border-r border-reader-edge px-3 text-[12px] transition-colors ${
+                className={`group flex h-7 shrink-0 cursor-pointer items-center gap-1.5 rounded-[7px] pl-2.5 text-[12px] transition-colors ${
                   isActive
-                    ? "bg-[#121212] text-reader"
-                    : "text-reader-muted hover:bg-[#161616] hover:text-reader"
+                    ? "bg-white/[0.08] pr-1.5 font-medium text-stone-100"
+                    : "pr-2.5 text-stone-500 hover:bg-white/[0.04] hover:text-stone-300"
                 }`}
               >
                 {isEditing ? (
@@ -367,10 +367,42 @@ export function FloatingPanel({ isOpen, onClose }: FloatingPanelProps) {
                       if (e.key === "Escape") setEditingTabId(null);
                     }}
                     onClick={(e) => e.stopPropagation()}
-                    className="w-[80px] rounded-[3px] bg-[#2a2a2a] px-1 py-0 text-[12px] text-reader outline-none"
+                    onDoubleClick={(e) => e.stopPropagation()}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    className="h-[20px] w-[88px] rounded-[4px] bg-black/40 px-1.5 text-[12px] text-stone-100 outline-none"
+                    style={{ boxShadow: "0 0 0 1px var(--reader-accent)" }}
                   />
                 ) : (
-                  <span className="max-w-[90px] truncate">{tab.label}</span>
+                  <>
+                    <span className="max-w-[110px] truncate">{tab.label}</span>
+                    {isActive &&
+                      (tabs.length > 1 ? (
+                        /* Accent dot that morphs into a close button on hover */
+                        <span className="relative flex h-[16px] w-[16px] items-center justify-center">
+                          <span
+                            className="h-[5px] w-[5px] rounded-full transition-opacity group-hover:opacity-0"
+                            style={{ backgroundColor: "var(--reader-accent)" }}
+                          />
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void handleDeleteTab(tab.id);
+                            }}
+                            onPointerDown={(e) => e.stopPropagation()}
+                            className="absolute inset-0 flex items-center justify-center rounded-[4px] opacity-0 transition-opacity hover:bg-white/10 group-hover:opacity-100"
+                            aria-label={`Delete ${tab.label}`}
+                            title="Delete canvas"
+                          >
+                            <X size={11} strokeWidth={2.25} />
+                          </button>
+                        </span>
+                      ) : (
+                        <span
+                          className="mx-[5px] h-[5px] w-[5px] rounded-full"
+                          style={{ backgroundColor: "var(--reader-accent)" }}
+                        />
+                      ))}
+                  </>
                 )}
               </div>
             );
@@ -378,11 +410,34 @@ export function FloatingPanel({ isOpen, onClose }: FloatingPanelProps) {
         </div>
 
         <button
+          onPointerDown={(e) => e.stopPropagation()}
           onClick={handleCreateTab}
-          className="flex h-[32px] w-[32px] shrink-0 items-center justify-center text-reader-muted transition-colors hover:bg-[#161616] hover:text-reader"
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] text-stone-500 transition-colors hover:bg-white/[0.06] hover:text-stone-200"
           aria-label="New canvas"
+          title="New canvas"
         >
           <Plus size={14} strokeWidth={2} />
+        </button>
+
+        <div className="mx-1 h-4 w-px shrink-0 bg-white/[0.08]" />
+
+        <button
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={() => setMinimized(true)}
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] text-stone-500 transition-colors hover:bg-white/[0.06] hover:text-stone-200"
+          aria-label="Minimize drawing panel"
+          title="Minimize"
+        >
+          <Minus size={14} strokeWidth={2} />
+        </button>
+        <button
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={() => onClose()}
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] text-stone-500 transition-colors hover:bg-red-500/15 hover:text-red-400"
+          aria-label="Close drawing panel"
+          title="Close"
+        >
+          <X size={14} strokeWidth={2} />
         </button>
       </div>
 
@@ -512,25 +567,25 @@ function TabContextMenu({
   // Adjust position so the menu fits within the viewport.
   const style: React.CSSProperties = {
     position: "fixed",
-    left: Math.min(x, window.innerWidth - 160),
-    top: Math.min(y, window.innerHeight - items.length * 32 - 8),
+    left: Math.min(x, window.innerWidth - 168),
+    top: Math.min(y, window.innerHeight - items.length * 30 - 12),
     zIndex: 50,
   };
 
   return (
     <div
       style={style}
-      className="min-w-[140px] overflow-hidden rounded-[6px] border border-reader-edge bg-[#1e1e1e] py-1 shadow-[0_4px_16px_rgba(0,0,0,0.5)]"
+      className="min-w-[152px] overflow-hidden rounded-[9px] border border-white/[0.08] bg-[#211e1a]/95 p-1 shadow-[0_10px_32px_rgba(0,0,0,0.55)] backdrop-blur-md"
       onPointerDown={(e) => e.stopPropagation()}
     >
       {items.map((item) => (
         <button
           key={item.label}
           onClick={item.action}
-          className={`flex w-full items-center gap-2 px-3 py-[7px] text-[12px] transition-colors ${
+          className={`flex w-full items-center gap-2 rounded-[6px] px-2.5 py-[6px] text-[12px] transition-colors ${
             item.danger
-              ? "text-red-400 hover:bg-red-400/10"
-              : "text-reader-muted hover:bg-[#2a2a2a] hover:text-reader"
+              ? "text-red-400/90 hover:bg-red-500/10 hover:text-red-400"
+              : "text-stone-400 hover:bg-white/[0.06] hover:text-stone-100"
           }`}
         >
           <item.icon size={13} strokeWidth={1.75} />
