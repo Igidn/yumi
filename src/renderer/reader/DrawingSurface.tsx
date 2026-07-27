@@ -48,8 +48,8 @@ function pickPersistedAppState(appState: AppState): Record<string, unknown> {
 /** Defaults for a fresh canvas (dark notepad on the panel's glass). */
 const DEFAULT_SCENE_APP_STATE: Record<string, unknown> = {
   theme: "dark",
-  viewBackgroundColor: "transparent",
-  gridModeEnabled: true,
+  viewBackgroundColor: "#121212",
+  gridModeEnabled: false,
   currentItemStrokeColor: "#1e1e1e",
 };
 
@@ -261,7 +261,6 @@ export function DrawingSurface({ tabId }: { tabId: string }) {
         }}
         UIOptions={{
           canvasActions: {
-            changeViewBackgroundColor: false,
             clearCanvas: false,
             export: false,
             loadScene: false,

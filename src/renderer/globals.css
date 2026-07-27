@@ -226,7 +226,6 @@
   display: none !important;
 }
 
-/* Transparent canvas: let the panel's glass background show through. */
 .yumi-excalidraw .excalidraw {
-  background: transparent;
+  background: #121212;
 }

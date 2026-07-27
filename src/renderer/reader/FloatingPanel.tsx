@@ -297,12 +297,13 @@ export function FloatingPanel({ isOpen, onClose }: FloatingPanelProps) {
   return (
     <>
       <div
-        className="fixed z-[25] flex flex-col overflow-hidden rounded-[10px] border border-reader-edge bg-reader-chrome/95 shadow-[0_8px_32px_rgba(0,0,0,0.45)] backdrop-blur-md"
+        className="fixed z-[25] flex flex-col overflow-hidden rounded-[10px] border border-reader-edge shadow-[0_8px_32px_rgba(0,0,0,0.45)]"
         style={{
           left: rect.x,
           top: rect.y,
           width: rect.width,
           height: rect.height,
+          backgroundColor: "#121212",
         }}
       >
       {/* ---- title bar (drag handle) ---- */}
