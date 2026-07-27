@@ -50,7 +50,7 @@ const DEFAULT_SCENE_APP_STATE: Record<string, unknown> = {
   theme: "dark",
   viewBackgroundColor: "transparent",
   gridModeEnabled: true,
-  currentItemStrokeColor: "#ffffff",
+  currentItemStrokeColor: "#1e1e1e",
 };
 
 /**
