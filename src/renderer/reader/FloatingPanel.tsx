@@ -434,6 +434,7 @@ function ResizeHandle({
 
   const style: React.CSSProperties = {
     position: "absolute",
+    zIndex: 30,
     cursor: cursorForDir(dir),
   };
 
