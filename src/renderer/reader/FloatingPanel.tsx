@@ -135,12 +135,15 @@ export function FloatingPanel({ isOpen, onClose }: FloatingPanelProps) {
   }, [ctxMenu]);
 
   const handleCreateTab = useCallback(async () => {
-    const idx = tabs.length + 1;
-    const label = `Canvas ${idx}`;
+    const maxNum = tabs.reduce((max, t) => {
+      const m = t.label.match(/^Canvas (\d+)$/);
+      return m ? Math.max(max, parseInt(m[1], 10)) : max;
+    }, 0);
+    const label = `Canvas ${maxNum + 1}`;
     const tab = await window.yumi.invoke("drawing:create-tab", { label });
     setTabs((prev) => [...prev, tab]);
     setActiveTabId(tab.id);
-  }, [tabs.length]);
+  }, [tabs]);
 
   const handleRenameStart = useCallback((tab: DrawingTab) => {
     setEditingTabId(tab.id);
