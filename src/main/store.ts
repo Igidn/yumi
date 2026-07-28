@@ -33,7 +33,7 @@ export async function getStore(): Promise<TypedStore> {
   const { default: StoreConstructor } = await modulePromise;
   const instance = new StoreConstructor<StoreSchema>({
     defaults: {
-      windowBounds: { width: 1200, height: 800 },
+      windowBounds: { width: 1188, height: 900 },
       readerWindowBounds: { width: 1160, height: 840 },
       lastOpenedBookId: null,
     },
