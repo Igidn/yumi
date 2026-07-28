@@ -13,6 +13,7 @@ import { getCoversDir } from "./paths";
 import { loadReaderBook, saveReaderProgress } from "./reader";
 import { closeReaderWindow, openReaderWindow } from "./windows";
 import { getStore } from "./store";
+import { registerDrawingIpcHandlers } from "./drawings-ipc";
 import type {
   IPCChannel,
   IPCPayloads,
@@ -43,6 +44,8 @@ export function broadcastEvent(event: YumiEvent): void {
 }
 
 export function registerIpcHandlers(): void {
+  registerDrawingIpcHandlers();
+
   handle("settings:get", async (_, payload) => {
     const db = await getDb();
     const row = await db.query.appSettings.findFirst({

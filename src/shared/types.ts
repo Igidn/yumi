@@ -24,7 +24,29 @@ export interface Book {
  * One-way main → renderer notifications. Distinct from `IPCChannel` so the
  * preload bridge can type `on()` separately from the request/response `invoke()`.
  */
-export type YumiEvent = "library:changed" | "window:enterFullScreen" | "window:leaveFullScreen";
+export type YumiEvent =
+  | "library:changed"
+  | "window:enterFullScreen"
+  | "window:leaveFullScreen"
+  | "drawing:scene-updated";
+
+// --- Drawing system types ---
+
+export interface DrawingTab {
+  id: string;
+  label: string;
+  createdAt: string;
+}
+
+/**
+ * Serialized Excalidraw scene, stored as a JSON string in `tabs.scene_data`.
+ * Loosely typed here because `shared/` is consumed by the main process too;
+ * the renderer restores it into real Excalidraw types.
+ */
+export interface SceneBlob {
+  elements: readonly unknown[];
+  appState: Record<string, unknown>;
+}
 
 /** A flat, renderer-ready block extracted from a chapter's XHTML. */
 export interface ContentBlock {
@@ -81,7 +103,14 @@ export type IPCChannel =
   | "dialog:openFile"
   | "dialog:openImage"
   | "db:fts5"
-  | "window:isFullScreen";
+  | "window:isFullScreen"
+  | "drawing:load-tabs"
+  | "drawing:load-scene"
+  | "drawing:save-scene"
+  | "drawing:create-tab"
+  | "drawing:rename-tab"
+  | "drawing:delete-tab"
+  | "drawing:clear-tab";
 
 /** Result of an `import:book` call (SPEC §1 duplicate handling). */
 export type ImportOutcome =
@@ -130,6 +159,13 @@ export interface IPCPayloads {
   "dialog:openImage": void;
   "db:fts5": void;
   "window:isFullScreen": void;
+  "drawing:load-tabs": void;
+  "drawing:load-scene": { tabId: string };
+  "drawing:save-scene": { tabId: string; sceneData: string };
+  "drawing:create-tab": { label: string };
+  "drawing:rename-tab": { tabId: string; label: string };
+  "drawing:delete-tab": { tabId: string };
+  "drawing:clear-tab": { tabId: string };
 }
 
 export interface IPCResponses {
@@ -148,6 +184,13 @@ export interface IPCResponses {
   "dialog:openImage": string | null;
   "db:fts5": boolean;
   "window:isFullScreen": boolean;
+  "drawing:load-tabs": DrawingTab[];
+  "drawing:load-scene": string | null;
+  "drawing:save-scene": void;
+  "drawing:create-tab": DrawingTab;
+  "drawing:rename-tab": void;
+  "drawing:delete-tab": void;
+  "drawing:clear-tab": void;
 }
 
 export interface YumiAPI {
@@ -164,9 +207,9 @@ export interface YumiAPI {
   /**
    * Subscribe to a main-process event. Returns an unsubscribe function.
    */
-  on<E extends YumiEvent>(
-    event: E,
-    listener: () => void
+  on(
+    event: string,
+    listener: (...args: any[]) => void
   ): () => void;
   /** Check whether the window is in macOS native fullscreen. */
   isFullScreen: () => Promise<boolean>;
