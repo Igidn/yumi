@@ -158,7 +158,7 @@ export function DrawingSurface({ tabId }: { tabId: string }) {
   > | null>(null);
   if (!debouncedSaveRef.current) {
     debouncedSaveRef.current = debounce((elements, appState) => {
-      void saveRef.current(elements, appState);
+      void saveRef.current(elements, appState).catch(console.error);
     }, SAVE_DEBOUNCE_MS);
   }
 

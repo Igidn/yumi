@@ -15,7 +15,7 @@ type ResizeDir = "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw";
 const MIN_WIDTH = 200;
 const MIN_HEIGHT = 150;
 const HANDLE_SIZE = 6;
-const CORNER_SIZE = 12;
+const CORNER_SIZE = 16;
 
 const PANEL_STATE_KEY = "drawing:panel-state";
 const ACTIVE_TAB_KEY = "drawing:active-tab";
@@ -135,14 +135,18 @@ export function FloatingPanel({ isOpen, onClose }: FloatingPanelProps) {
   }, [ctxMenu]);
 
   const handleCreateTab = useCallback(async () => {
-    const maxNum = tabs.reduce((max, t) => {
-      const m = t.label.match(/^Canvas (\d+)$/);
-      return m ? Math.max(max, parseInt(m[1], 10)) : max;
-    }, 0);
-    const label = `Canvas ${maxNum + 1}`;
-    const tab = await window.yumi.invoke("drawing:create-tab", { label });
-    setTabs((prev) => [...prev, tab]);
-    setActiveTabId(tab.id);
+    try {
+      const maxNum = tabs.reduce((max, t) => {
+        const m = t.label.match(/^Canvas (\d+)$/);
+        return m ? Math.max(max, parseInt(m[1], 10)) : max;
+      }, 0);
+      const label = `Canvas ${maxNum + 1}`;
+      const tab = await window.yumi.invoke("drawing:create-tab", { label });
+      setTabs((prev) => [...prev, tab]);
+      setActiveTabId(tab.id);
+    } catch (err) {
+      console.error(err);
+    }
   }, [tabs]);
 
   const handleRenameStart = useCallback((tab: DrawingTab) => {
@@ -158,10 +162,14 @@ export function FloatingPanel({ isOpen, onClose }: FloatingPanelProps) {
       setEditingTabId(null);
       return;
     }
-    await window.yumi.invoke("drawing:rename-tab", { tabId, label });
-    setTabs((prev) =>
-      prev.map((t) => (t.id === tabId ? { ...t, label } : t))
-    );
+    try {
+      await window.yumi.invoke("drawing:rename-tab", { tabId, label });
+      setTabs((prev) =>
+        prev.map((t) => (t.id === tabId ? { ...t, label } : t))
+      );
+    } catch (err) {
+      console.error(err);
+    }
     setEditingTabId(null);
   }, [editingTabId, editingLabel]);
 
@@ -170,10 +178,14 @@ export function FloatingPanel({ isOpen, onClose }: FloatingPanelProps) {
     if (tabs.length <= 1) return; // keep at least one tab
     if (!window.confirm("Delete this canvas and all its drawings?")) return;
 
-    await window.yumi.invoke("drawing:delete-tab", { tabId });
-    const remaining = tabs.filter((t) => t.id !== tabId);
-    setTabs(remaining);
-    if (activeTabId === tabId) setActiveTabId(remaining[0].id);
+    try {
+      await window.yumi.invoke("drawing:delete-tab", { tabId });
+      const remaining = tabs.filter((t) => t.id !== tabId);
+      setTabs(remaining);
+      if (activeTabId === tabId) setActiveTabId(remaining[0].id);
+    } catch (err) {
+      console.error(err);
+    }
   }, [tabs, activeTabId]);
 
   const handleDuplicateTab = useCallback(async (tabId: string) => {
@@ -181,28 +193,36 @@ export function FloatingPanel({ isOpen, onClose }: FloatingPanelProps) {
     const src = tabs.find((t) => t.id === tabId);
     if (!src) return;
 
-    const sceneData = await window.yumi.invoke("drawing:load-scene", { tabId });
-    const newTab = await window.yumi.invoke("drawing:create-tab", {
-      label: `${src.label} (copy)`,
-    });
-    if (sceneData) {
-      await window.yumi.invoke("drawing:save-scene", {
-        tabId: newTab.id,
-        sceneData,
+    try {
+      const sceneData = await window.yumi.invoke("drawing:load-scene", { tabId });
+      const newTab = await window.yumi.invoke("drawing:create-tab", {
+        label: `${src.label} (copy)`,
       });
+      if (sceneData) {
+        await window.yumi.invoke("drawing:save-scene", {
+          tabId: newTab.id,
+          sceneData,
+        });
+      }
+      setTabs((prev) => [...prev, newTab]);
+      setActiveTabId(newTab.id);
+    } catch (err) {
+      console.error(err);
     }
-    setTabs((prev) => [...prev, newTab]);
-    setActiveTabId(newTab.id);
   }, [tabs]);
 
   const handleClearTab = useCallback(
     async (tabId: string) => {
       setCtxMenu(null);
       if (!window.confirm("Clear all drawings from this canvas?")) return;
-      await window.yumi.invoke("drawing:clear-tab", { tabId });
-      // The broadcast skips the sender, so remount the local canvas to show
-      // the now-empty scene when the cleared tab is the visible one.
-      if (tabId === activeTabId) setCanvasNonce((n) => n + 1);
+      try {
+        await window.yumi.invoke("drawing:clear-tab", { tabId });
+        // The broadcast skips the sender, so remount the local canvas to show
+        // the now-empty scene when the cleared tab is the visible one.
+        if (tabId === activeTabId) setCanvasNonce((n) => n + 1);
+      } catch (err) {
+        console.error(err);
+      }
     },
     [activeTabId]
   );
@@ -525,17 +545,17 @@ function ResizeHandle({
   }
 
   if (dir === "ne") {
-    style.top = -4;
-    style.right = -4;
+    style.top = 0;
+    style.right = 0;
   } else if (dir === "nw") {
-    style.top = -4;
-    style.left = -4;
+    style.top = 0;
+    style.left = 0;
   } else if (dir === "se") {
-    style.bottom = -4;
-    style.right = -4;
+    style.bottom = 0;
+    style.right = 0;
   } else if (dir === "sw") {
-    style.bottom = -4;
-    style.left = -4;
+    style.bottom = 0;
+    style.left = 0;
   }
 
   return <div style={style} onPointerDown={onPointerDown} />;
