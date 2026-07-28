@@ -1,4 +1,4 @@
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq, isNull } from "drizzle-orm";
 
 import type {
   ContentBlock,
@@ -181,6 +181,14 @@ export async function saveReaderProgress(payload: {
       .update(books)
       .set({ progress: bookProgress })
       .where(eq(books.id, payload.bookId));
+    if (bookProgress >= 1) {
+      // Stamp the finish date once per finish cycle; "still reading" clears
+      // it (via books:update), so re-finishing after that counts again.
+      await db
+        .update(books)
+        .set({ finishedAt: new Date().toISOString() })
+        .where(and(eq(books.id, payload.bookId), isNull(books.finishedAt)));
+    }
   } catch (err) {
     // ponytail: single-statement writes, no transaction needed; a crash
     // between the two writes leaves progress partially saved, but the

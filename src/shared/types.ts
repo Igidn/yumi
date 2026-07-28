@@ -16,8 +16,24 @@ export interface Book {
   progress: number;
   // Progress before a manual "mark finished"; null when not finished that way.
   priorProgress: number | null;
+  // First time progress reached 1; null while unfinished.
+  finishedAt: string | null;
   collection: string;
   trashed: number;
+}
+
+/** Snapshot for the library "Reading goal" panel. */
+export interface ReadingStats {
+  // Daily goal in minutes (user-configurable, stored in app_settings).
+  goalMinutes: number;
+  // Active reading time logged for today.
+  todaySeconds: number;
+  // Consecutive days (ending today/yesterday) the goal was met.
+  streakDays: number;
+  // Longest goal-completion streak ever.
+  bestStreakDays: number;
+  // Books finished in the current calendar year, most recent first.
+  booksReadThisYear: Book[];
 }
 
 /**
@@ -97,6 +113,8 @@ export type IPCChannel =
   | "reader:open"
   | "reader:load"
   | "reader:progress"
+  | "reading:log"
+  | "reading:stats"
   | "import:book"
   | "dialog:openFile"
   | "dialog:openImage"
@@ -146,6 +164,9 @@ export interface IPCPayloads {
     // 0–1 position across the whole book.
     bookProgress: number;
   };
+  // Reader window heartbeat: active reading time to log for today.
+  "reading:log": { seconds: number };
+  "reading:stats": void;
   "import:book": {
     sourcePath: string;
     // Resolution for a detected duplicate. Omit ("prompt") to detect and
@@ -177,6 +198,8 @@ export interface IPCResponses {
   "reader:open": void;
   "reader:load": ReaderPayload;
   "reader:progress": void;
+  "reading:log": void;
+  "reading:stats": ReadingStats;
   "import:book": ImportOutcome;
   "dialog:openFile": string[];
   "dialog:openImage": string | null;

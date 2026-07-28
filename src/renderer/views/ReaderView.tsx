@@ -145,6 +145,19 @@ export function ReaderView({ bookId }: { bookId: number }) {
     };
   }, [flushProgress]);
 
+  // Reading-time heartbeat for the library goal/streak panel. Ticks only
+  // while this window is visible and focused, so an idle-open book never
+  // inflates the daily count.
+  useEffect(() => {
+    const TICK_MS = 15_000;
+    const id = window.setInterval(() => {
+      if (document.visibilityState !== "visible" || !document.hasFocus())
+        return;
+      void window.yumi.invoke("reading:log", { seconds: TICK_MS / 1000 });
+    }, TICK_MS);
+    return () => window.clearInterval(id);
+  }, []);
+
   const goToChapter = useCallback(
     (pos: number, fraction: number, keepJump?: boolean) => {
       const data = payloadRef.current;

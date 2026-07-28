@@ -15,6 +15,7 @@ import { registerDrawingIpcHandlers } from "./drawings-ipc";
 import { bookForRenderer, deleteBook, importBook } from "./import";
 import { getCoversDir } from "./paths";
 import { loadReaderBook, saveReaderProgress } from "./reader";
+import { getReadingStats, logReadingSeconds } from "./reading";
 import { getStore } from "./store";
 import { closeReaderWindow, openReaderWindow } from "./windows";
 
@@ -103,6 +104,7 @@ export function registerIpcHandlers(): void {
       author?: string;
       progress?: number;
       priorProgress?: number | null;
+      finishedAt?: string | null;
       coverPath?: string;
     } = {};
     if (payload.title !== undefined)
@@ -114,10 +116,14 @@ export function registerIpcHandlers(): void {
       patch.progress =
         prior != null && prior < 1 ? Math.min(1, Math.max(0, prior)) : 0;
       patch.priorProgress = null;
+      patch.finishedAt = null;
     } else if (payload.progress !== undefined) {
       const next = Math.min(1, Math.max(0, payload.progress));
       if (next >= 1 && existing.progress < 1) {
         patch.priorProgress = existing.progress;
+        patch.finishedAt = new Date().toISOString();
+      } else if (next < 1 && existing.progress >= 1) {
+        patch.finishedAt = null;
       }
       patch.progress = next;
     }
@@ -185,6 +191,16 @@ export function registerIpcHandlers(): void {
   handle("reader:progress", async (_, payload) => {
     await saveReaderProgress(payload);
     broadcastLibraryChangedThrottled();
+  });
+
+  handle("reading:log", async (_, payload) => {
+    await logReadingSeconds(payload.seconds);
+    // Let the library goal panel tick up while a reader window is open.
+    broadcastLibraryChangedThrottled();
+  });
+
+  handle("reading:stats", async () => {
+    return getReadingStats();
   });
 
   handle("books:delete", async (_, payload) => {

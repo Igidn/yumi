@@ -14,6 +14,9 @@ export const books = sqliteTable("books", {
   progress: real("progress").notNull().default(0), // 0–1 fraction
   // Progress before a manual "mark finished"; restored by "still reading".
   priorProgress: real("prior_progress"),
+  // First time progress reached 1; cleared by "still reading". Drives the
+  // "books read this year" shelf.
+  finishedAt: text("finished_at"),
   collection: text("collection").notNull().default(""),
   trashed: integer("trashed").notNull().default(0), // boolean
 });
@@ -68,4 +71,11 @@ export const drawings = sqliteTable("drawings", {
 export const appSettings = sqliteTable("app_settings", {
   key: text("key").primaryKey(),
   value: text("value").notNull(),
+});
+
+// Active reading time per day, fed by the reader window's heartbeat. Drives
+// the daily reading goal and the completion streak on the library page.
+export const readingActivity = sqliteTable("reading_activity", {
+  date: text("date").primaryKey(), // YYYY-MM-DD, local time
+  seconds: integer("seconds").notNull().default(0),
 });

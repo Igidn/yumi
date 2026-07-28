@@ -80,6 +80,7 @@ if (isMain) {
     lastOpenedAt: null,
     progress: 0,
     priorProgress: null,
+    finishedAt: null,
     collection: "",
     trashed: 0,
     ...over,

@@ -11,6 +11,7 @@ import type { Book } from "../../shared/types";
 import { BookCard } from "../components/BookCard";
 import { BookDetail } from "../components/BookDetail";
 import { BookMenu, type MenuState } from "../components/BookMenu";
+import { ReadingGoalPanel } from "../components/ReadingGoalPanel";
 import { SortMenu } from "../components/SortMenu";
 import { compareBooks, SORT_OPTIONS, type SortKey } from "../library/sort";
 
@@ -253,25 +254,32 @@ export function LibraryView({
         </div>
       ) : (
         <>
-          {shelf.length > 0 && (
-            <section className="mt-9">
-              <h2 className={sectionLabel}>Continue reading</h2>
-              <div className="no-scrollbar -mx-8 mt-4 flex gap-6 overflow-x-auto px-8 pb-1">
-                {shelf.map((book) => (
-                  <div key={book.id} className="w-[140px] shrink-0">
-                    <BookCard
-                      book={book}
-                      onOpen={() => onOpenBook(book)}
-                      onMenu={(pos) => setMenu({ book, ...pos })}
-                    />
+          {/* The shelf + goal panel hide while searching: the filtered grid
+              below already answers the query. */}
+          {!query.trim() && (
+            <section className="mt-9 flex gap-10">
+              {shelf.length > 0 && (
+                <div className="min-w-0 flex-1">
+                  <h2 className={sectionLabel}>Continue reading</h2>
+                  <div className="no-scrollbar -ml-8 mt-4 flex gap-6 overflow-x-auto pl-8 pb-1">
+                    {shelf.map((book) => (
+                      <div key={book.id} className="w-[140px] shrink-0">
+                        <BookCard
+                          book={book}
+                          onOpen={() => onOpenBook(book)}
+                          onMenu={(pos) => setMenu({ book, ...pos })}
+                        />
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
+                </div>
+              )}
+              <ReadingGoalPanel wide={shelf.length === 0} />
             </section>
           )}
 
           <section className="mt-10">
-            {shelf.length > 0 && <h2 className={sectionLabel}>All books</h2>}
+            {!query.trim() && <h2 className={sectionLabel}>All books</h2>}
             <div className="mt-4 grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-x-6 gap-y-12">
               {visibleBooks.map((book) => (
                 <BookCard
