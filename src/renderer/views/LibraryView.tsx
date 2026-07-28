@@ -80,7 +80,7 @@ export function LibraryView({
     return books
       .filter((b) => b.progress > 0 && b.progress < 1)
       .sort((a, b) => compareBooks(a, b, { field: "recent", dir: "desc" }))
-      .slice(0, 10);
+      .slice(0, 4);
   }, [books, query]);
 
   const detailBook =
