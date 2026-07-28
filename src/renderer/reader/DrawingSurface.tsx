@@ -1,12 +1,14 @@
-import { useEffect, useRef } from "react";
+import "@excalidraw/excalidraw/index.css";
+
 import { Excalidraw, getSceneVersion, restore } from "@excalidraw/excalidraw";
+import type { OrderedExcalidrawElement } from "@excalidraw/excalidraw/element/types";
 import type {
   AppState,
   ExcalidrawImperativeAPI,
 } from "@excalidraw/excalidraw/types";
-import type { OrderedExcalidrawElement } from "@excalidraw/excalidraw/element/types";
+import { useEffect, useRef } from "react";
+
 import type { SceneBlob } from "../../shared/types";
-import "@excalidraw/excalidraw/index.css";
 
 const SAVE_DEBOUNCE_MS = 500;
 
@@ -151,21 +153,24 @@ export function DrawingSurface({ tabId }: { tabId: string }) {
   };
 
   const saveRef = useRef(saveScene);
-  saveRef.current = saveScene;
-
   const debouncedSaveRef = useRef<Debounced<
     [readonly OrderedExcalidrawElement[], AppState]
   > | null>(null);
-  if (!debouncedSaveRef.current) {
-    debouncedSaveRef.current = debounce((elements, appState) => {
-      void saveRef.current(elements, appState).catch(console.error);
-    }, SAVE_DEBOUNCE_MS);
-  }
+
+  useEffect(() => {
+    saveRef.current = saveScene;
+  });
 
   // Flush any pending save when the tab unmounts (switch/close), so the
   // debounce window never swallows the user's last stroke.
   useEffect(() => {
-    const debounced = debouncedSaveRef.current!;
+    const debounced = debounce(
+      (elements: readonly OrderedExcalidrawElement[], appState: AppState) => {
+        void saveRef.current(elements, appState).catch(console.error);
+      },
+      SAVE_DEBOUNCE_MS
+    );
+    debouncedSaveRef.current = debounced;
     return () => debounced.flush();
   }, []);
 
@@ -253,7 +258,7 @@ export function DrawingSurface({ tabId }: { tabId: string }) {
             return; // echo of our own load/updateScene — nothing to save
           }
           lastPersistedRef.current = fingerprint;
-          debouncedSaveRef.current!(elements, appState);
+          debouncedSaveRef.current?.(elements, appState);
         }}
         onPaste={(data) => {
           // Binary files (pasted images) aren't persisted in the scene blob,

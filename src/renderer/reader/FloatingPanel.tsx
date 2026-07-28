@@ -1,5 +1,6 @@
-import { useState, useCallback, useEffect, useRef } from "react";
-import { Minus, X, Pen, Plus, Pencil, Trash2, Copy, Eraser } from "lucide-react";
+import { Copy, Eraser,Minus, Pen, Pencil, Plus, Trash2, X } from "lucide-react";
+import { useCallback, useEffect, useRef,useState } from "react";
+
 import type { DrawingTab } from "../../shared/types";
 import { DrawingSurface } from "./DrawingSurface";
 

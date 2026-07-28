@@ -1,11 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowDownNarrowWide, ArrowUpNarrowWide, Plus, Search } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+
 import type { Book } from "../../shared/types";
-import { BookDetail } from "../components/BookDetail";
 import { BookCard } from "../components/BookCard";
+import { BookDetail } from "../components/BookDetail";
 import { BookMenu, type MenuState } from "../components/BookMenu";
 import { SortMenu } from "../components/SortMenu";
-import { SORT_OPTIONS, compareBooks, type SortKey } from "../library/sort";
+import { compareBooks, SORT_OPTIONS, type SortKey } from "../library/sort";
 
 export function LibraryView({
   onOpenBook,

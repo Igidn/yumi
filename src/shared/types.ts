@@ -209,7 +209,7 @@ export interface YumiAPI {
    */
   on(
     event: string,
-    listener: (...args: any[]) => void
+    listener: (...args: unknown[]) => void
   ): () => void;
   /** Check whether the window is in macOS native fullscreen. */
   isFullScreen: () => Promise<boolean>;

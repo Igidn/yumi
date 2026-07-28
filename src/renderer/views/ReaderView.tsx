@@ -1,23 +1,24 @@
-import { useCallback, useEffect, useRef, useState } from "react";
 import { List, Pen, Search, Undo2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
 import type { ReaderPayload } from "../../shared/types";
+import { AppearanceMenu } from "../reader/AppearanceMenu";
+import { FloatingPanel } from "../reader/FloatingPanel";
 import {
-  PagedChapter,
   countChapterCols,
+  PagedChapter,
   type PageJump,
   type Reposition,
   type SpreadInfo,
 } from "../reader/PagedChapter";
-import { TocPanel } from "../reader/TocPanel";
-import { AppearanceMenu } from "../reader/AppearanceMenu";
 import { SearchPanel } from "../reader/SearchPanel";
-import { FloatingPanel } from "../reader/FloatingPanel";
 import {
   DEFAULT_READER_SETTINGS,
   loadReaderSettings,
-  saveReaderSettings,
   type ReaderSettings,
+  saveReaderSettings,
 } from "../reader/settings";
+import { TocPanel } from "../reader/TocPanel";
 
 /** px from top of viewport considered "hovering the header zone" */
 const HEADER_HOVER_ZONE = 80;
@@ -46,8 +47,6 @@ export function ReaderView({ bookId }: { bookId: number }) {
   /** Fraction to land at when the chapter changes (0 start, 1 end, resume). */
   const [landingFraction, setLandingFraction] = useState(0);
   const [pageInfo, setPageInfo] = useState<SpreadInfo | null>(null);
-  /** Column counts per chapter under the current layout; null until measured. */
-  const [colsByChapter, setColsByChapter] = useState<number[] | null>(null);
   const [panel, setPanel] = useState<Panel>(null);
   const [appearanceOpen, setAppearanceOpen] = useState(false);
   const [drawingOpen, setDrawingOpen] = useState(false);
@@ -335,26 +334,21 @@ export function ReaderView({ bookId }: { bookId: number }) {
   );
 
   // Book-wide page offsets: remeasure every chapter when layout/typography changes.
-  // ponytail: sync full-book measure; chunk if 200+ chapter books jank on resize.
-  useEffect(() => {
-    if (!payload || !pageInfo) return;
+  // ponytail: DOM measure during render; chunk if 200+ chapter books jank on resize.
+  const colsByChapter = useMemo(() => {
+    if (!payload || !pageInfo) return null;
     const layout = {
       contentWidth: pageInfo.contentWidth,
       contentHeight: pageInfo.contentHeight,
       colWidth: pageInfo.colWidth,
       colGap: pageInfo.colGap,
     };
-    setColsByChapter(
-      payload.chapters.map((ch) =>
-        countChapterCols(ch, layout, settings.fontSize, settings.lineHeight)
-      )
+    return payload.chapters.map((ch) =>
+      countChapterCols(ch, layout, settings.fontSize, settings.lineHeight)
     );
   }, [
     payload,
-    pageInfo?.contentWidth,
-    pageInfo?.contentHeight,
-    pageInfo?.colWidth,
-    pageInfo?.colGap,
+    pageInfo,
     settings.fontSize,
     settings.lineHeight,
   ]);

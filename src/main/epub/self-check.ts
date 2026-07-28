@@ -1,5 +1,5 @@
+import { parseEpub,readEpubMeta } from "./parse";
 import type { ContentBlock } from "./types";
-import { readEpubMeta, parseEpub } from "./parse";
 
 async function main(): Promise<void> {
   const file = process.argv[2];

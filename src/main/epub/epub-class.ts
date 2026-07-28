@@ -1,6 +1,7 @@
 import fs from "fs";
 import JSZip from "jszip";
-import { parseXml, parseMetadata, resolveHref, pathExt } from "./util";
+
+import { parseMetadata, parseXml, pathExt,resolveHref } from "./util";
 
 const MIME_BY_EXT: Record<string, string> = {
   jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png",

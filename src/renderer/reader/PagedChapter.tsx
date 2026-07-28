@@ -5,7 +5,8 @@ import {
   useRef,
   useState,
 } from "react";
-import type { ContentBlock, ReaderChapter } from "../../shared/types";
+
+import type { ReaderChapter } from "../../shared/types";
 
 /** Column geometry of the current viewport, recomputed on resize/typography. */
 interface Geometry {
@@ -219,19 +220,7 @@ export function PagedChapter({
   const lastRepositionNonce = useRef(0);
   const lastFragmentNonce = useRef(0);
 
-  // Chapter switch: drop geometry (hides content) and reseed the position.
-  // This is the render-time derived-state reset pattern; the layout effect
-  // below re-measures and re-positions before the next paint.
-  const chapterForState = useRef(chapter.id);
-  if (chapterForState.current !== chapter.id) {
-    chapterForState.current = chapter.id;
-    setGeom(null);
-    setSpread(0);
-    fractionRef.current = initialFraction;
-    lastJumpNonce.current = 0;
-    lastRepositionNonce.current = 0;
-    lastFragmentNonce.current = 0;
-  }
+  // Chapter switches remount via key={chapter.id} in ReaderView.
 
   const measure = useCallback(() => {
     const viewport = viewportRef.current;

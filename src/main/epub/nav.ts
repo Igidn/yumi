@@ -1,6 +1,6 @@
+import type { Epub } from "./epub-class";
 import { XHTML_NS } from "./types";
 import { resolveHref } from "./util";
-import type { Epub } from "./epub-class";
 
 // ---------------------------------------------------------------------------
 // Navigation / TOC parsing

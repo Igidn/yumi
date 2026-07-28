@@ -1,19 +1,20 @@
 import fs from "fs";
 import path from "path";
-import type { ParsedEpub, EpubCover, EpubMeta, ContentBlock } from "./types";
-import { MAX_EXTRACTED_IMAGES, MAX_IMAGE_SIZE_BYTES } from "./types";
+
+import { getCoversDir } from "../paths";
+import { extractBlocks, makeLinkResolver } from "./blocks";
 import { Epub } from "./epub-class";
 import { loadNav } from "./nav";
-import { extractBlocks, makeLinkResolver } from "./blocks";
+import type { ContentBlock,EpubCover, EpubMeta, ParsedEpub } from "./types";
+import { MAX_EXTRACTED_IMAGES, MAX_IMAGE_SIZE_BYTES } from "./types";
 import {
+  chapterTitle,
+  extFromCover,
+  getImageDimensions,
+  pathExt,
   resolveHref,
   stripFragment,
-  pathExt,
-  getImageDimensions,
-  extFromCover,
-  chapterTitle,
 } from "./util";
-import { getCoversDir } from "../paths";
 
 // ---------------------------------------------------------------------------
 // Cover extraction

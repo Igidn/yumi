@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from "react";
 import { ArrowDownNarrowWide, ArrowUpNarrowWide, Check } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+
 import { SORT_OPTIONS, type SortKey } from "../library/sort";
 import { fitToViewport } from "../shared/fit-to-viewport";
 

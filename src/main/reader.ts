@@ -1,13 +1,14 @@
 import { asc, eq } from "drizzle-orm";
-import { getDb } from "./database";
-import { books, chapters } from "./db/schema";
-import { parseEpub } from "./epub";
-import { bookForRenderer, coverUrlForRenderer } from "./import";
+
 import type {
   ContentBlock,
   ReaderChapter,
   ReaderPayload,
 } from "../shared/types";
+import { getDb } from "./database";
+import { books, chapters } from "./db/schema";
+import { parseEpub } from "./epub";
+import { bookForRenderer, coverUrlForRenderer } from "./import";
 
 /** Per-book parse lock so two concurrent reader:load calls don't both insert. */
 const parseLocks = new Map<number, ReturnType<typeof doParseEpub>>();

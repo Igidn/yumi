@@ -1,7 +1,8 @@
 import Database from "better-sqlite3";
 import path from "path";
-import { getUserDataPath } from "./paths";
+
 import type { DrawingTab } from "../shared/types";
+import { getUserDataPath } from "./paths";
 
 export const drawingsDbPath = path.join(getUserDataPath(), "drawings.db");
 

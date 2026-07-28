@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron";
+
 import type {
   IPCChannel,
   IPCPayloads,
@@ -11,13 +12,11 @@ contextBridge.exposeInMainWorld("yumi", {
     channel: C,
     ...args: IPCPayloads[C] extends void ? [] : [payload: IPCPayloads[C]]
   ): Promise<IPCResponses[C]> => {
-    return ipcRenderer.invoke(channel, ...(args as [any])) as Promise<
-      IPCResponses[C]
-    >;
+    return ipcRenderer.invoke(channel, ...args) as Promise<IPCResponses[C]>;
   },
   getPathForFile: (file: File): string => webUtils.getPathForFile(file),
-  on: (event: string, listener: (...args: any[]) => void): (() => void) => {
-    const wrapped = (_event: Electron.IpcRendererEvent, ...args: any[]) =>
+  on: (event: string, listener: (...args: unknown[]) => void): (() => void) => {
+    const wrapped = (_event: Electron.IpcRendererEvent, ...args: unknown[]) =>
       listener(...args);
     ipcRenderer.on(event, wrapped);
     return () => ipcRenderer.removeListener(event, wrapped);

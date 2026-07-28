@@ -1,9 +1,17 @@
+import { eq } from "drizzle-orm";
+import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
 import fs from "fs";
 import path from "path";
-import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
-import { eq } from "drizzle-orm";
+
+import type {
+  IPCChannel,
+  IPCPayloads,
+  IPCResponses,
+  YumiEvent,
+} from "../shared/types";
 import { getDb, hasFts5 } from "./database";
 import { appSettings, books } from "./db/schema";
+import { registerDrawingIpcHandlers } from "./drawings-ipc";
 import {
   bookForRenderer,
   deleteBook,
@@ -11,15 +19,8 @@ import {
 } from "./import";
 import { getCoversDir } from "./paths";
 import { loadReaderBook, saveReaderProgress } from "./reader";
-import { closeReaderWindow, openReaderWindow } from "./windows";
 import { getStore } from "./store";
-import { registerDrawingIpcHandlers } from "./drawings-ipc";
-import type {
-  IPCChannel,
-  IPCPayloads,
-  IPCResponses,
-  YumiEvent,
-} from "../shared/types";
+import { closeReaderWindow, openReaderWindow } from "./windows";
 
 type Handler<C extends IPCChannel> = (
   event: Electron.IpcMainInvokeEvent,
@@ -30,7 +31,13 @@ function handle<C extends IPCChannel>(
   channel: C,
   handler: Handler<C>
 ): void {
-  ipcMain.handle(channel, handler as any);
+  ipcMain.handle(
+    channel,
+    handler as (
+      event: Electron.IpcMainInvokeEvent,
+      ...args: unknown[]
+    ) => unknown
+  );
 }
 
 /**

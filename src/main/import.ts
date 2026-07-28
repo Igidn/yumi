@@ -1,12 +1,13 @@
-import fs from "fs";
-import path from "path";
 import { createHash } from "crypto";
 import { eq } from "drizzle-orm";
-import { getBooksDir, getCoversDir, getUserDataPath } from "./paths";
+import fs from "fs";
+import path from "path";
+
+import type { Book, BookFormat, ImportOutcome } from "../shared/types";
 import { getDb } from "./database";
 import { books } from "./db/schema";
 import { readEpubMeta } from "./epub";
-import type { Book, BookFormat, ImportOutcome } from "../shared/types";
+import { getBooksDir, getCoversDir, getUserDataPath } from "./paths";
 
 const SUPPORTED_EXTENSIONS: Record<string, BookFormat> = {
   ".epub": "epub",

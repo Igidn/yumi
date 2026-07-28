@@ -1,12 +1,13 @@
-import { ipcMain, BrowserWindow } from "electron";
+import { BrowserWindow,ipcMain } from "electron";
+
 import {
-  loadTabs,
-  loadScene,
-  saveScene,
-  createTab,
-  renameTab,
-  deleteTab,
   clearTab,
+  createTab,
+  deleteTab,
+  loadScene,
+  loadTabs,
+  renameTab,
+  saveScene,
 } from "./drawings-db";
 
 /**

@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
 import { Search } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+
 import type { ReaderChapter } from "../../shared/types";
 
 export interface SearchHit {

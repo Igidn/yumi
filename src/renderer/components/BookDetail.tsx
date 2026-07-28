@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from "react";
 import { ImagePlus, Trash2, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+
 import type { Book } from "../../shared/types";
 
 function progressLabel(book: Book): string {
@@ -42,20 +43,11 @@ export function BookDetail({
   onUpdated: (book: Book) => void;
   onDelete?: () => void;
 }) {
-  const [draft, setDraft] = useState(book);
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleValue, setTitleValue] = useState(book.title);
-  const [broken, setBroken] = useState(false);
+  const [brokenSrc, setBrokenSrc] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const titleRef = useRef<HTMLInputElement>(null);
-
-  // Parent may refresh the book after library:changed — keep local draft in sync
-  // when not mid-edit.
-  useEffect(() => {
-    setDraft(book);
-    if (!editingTitle) setTitleValue(book.title);
-    setBroken(false);
-  }, [book, editingTitle]);
 
   useEffect(() => {
     if (editingTitle) titleRef.current?.select();
@@ -67,34 +59,33 @@ export function BookDetail({
       if (e.key !== "Escape") return;
       if (editingTitle) {
         setEditingTitle(false);
-        setTitleValue(draft.title);
+        setTitleValue(book.title);
       } else {
         onClose();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [editingTitle, draft.title, onClose]);
+  }, [editingTitle, book.title, onClose]);
 
   const saveTitle = async () => {
     const next = titleValue.trim() || "Untitled";
     setEditingTitle(false);
-    if (next === draft.title) {
-      setTitleValue(draft.title);
+    if (next === book.title) {
+      setTitleValue(book.title);
       return;
     }
     setSaving(true);
     try {
       const updated = await window.yumi.invoke("books:update", {
-        id: draft.id,
+        id: book.id,
         title: next,
       });
-      setDraft(updated);
       setTitleValue(updated.title);
       onUpdated(updated);
     } catch (err) {
       console.error("[BookDetail] title update failed", err);
-      setTitleValue(draft.title);
+      setTitleValue(book.title);
     } finally {
       setSaving(false);
     }
@@ -106,11 +97,9 @@ export function BookDetail({
     setSaving(true);
     try {
       const updated = await window.yumi.invoke("books:update", {
-        id: draft.id,
+        id: book.id,
         coverSourcePath: path,
       });
-      setDraft(updated);
-      setBroken(false);
       onUpdated(updated);
     } catch (err) {
       console.error("[BookDetail] cover update failed", err);
@@ -119,7 +108,7 @@ export function BookDetail({
     }
   };
 
-  const showCover = !!draft.coverPath && !broken;
+  const showCover = !!book.coverPath && brokenSrc !== book.coverPath;
 
   return (
     <div
@@ -153,14 +142,14 @@ export function BookDetail({
           >
             {showCover ? (
               <img
-                src={draft.coverPath!}
+                src={book.coverPath!}
                 alt=""
                 className="h-full w-full object-cover"
                 draggable={false}
-                onError={() => setBroken(true)}
+                onError={() => setBrokenSrc(book.coverPath)}
               />
             ) : (
-              <CoverPlaceholder title={draft.title} />
+              <CoverPlaceholder title={book.title} />
             )}
             <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-page/0 transition-colors group-hover:bg-page/55">
               <ImagePlus
@@ -186,7 +175,7 @@ export function BookDetail({
                   } else if (e.key === "Escape") {
                     e.stopPropagation();
                     setEditingTitle(false);
-                    setTitleValue(draft.title);
+                    setTitleValue(book.title);
                   }
                 }}
                 disabled={saving}
@@ -197,25 +186,28 @@ export function BookDetail({
               <button
                 type="button"
                 id="book-detail-title"
-                onClick={() => setEditingTitle(true)}
+                onClick={() => {
+                  setTitleValue(book.title);
+                  setEditingTitle(true);
+                }}
                 className="-mx-1 rounded-[6px] px-1 text-left text-[16px] font-medium leading-snug text-ink transition-colors hover:bg-field"
                 title="Edit title"
               >
-                {draft.title || "Untitled"}
+                {book.title || "Untitled"}
               </button>
             )}
 
             <p className="mt-1 text-[13px] text-muted">
-              {draft.author || "Unknown author"}
+              {book.author || "Unknown author"}
             </p>
 
             <dl className="mt-5 space-y-2 text-[12px]">
-              <Row label="Format" value={draft.format.toUpperCase()} />
+              <Row label="Format" value={book.format.toUpperCase()} />
               {/* ponytail: page count arrives with the reader */}
               <Row label="Pages" value="—" />
-              <Row label="Progress" value={progressLabel(draft)} />
-              <Row label="Imported" value={formatDate(draft.importedAt)} />
-              <Row label="Last opened" value={formatDate(draft.lastOpenedAt)} />
+              <Row label="Progress" value={progressLabel(book)} />
+              <Row label="Imported" value={formatDate(book.importedAt)} />
+              <Row label="Last opened" value={formatDate(book.lastOpenedAt)} />
             </dl>
           </div>
         </div>
@@ -224,7 +216,7 @@ export function BookDetail({
           <button
             type="button"
             onClick={() => {
-              if (window.confirm(`Delete "${draft.title}"?`)) {
+              if (window.confirm(`Delete "${book.title}"?`)) {
                 onDelete?.();
                 onClose();
               }

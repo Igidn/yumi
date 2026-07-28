@@ -1,5 +1,6 @@
 import { BrowserWindow } from "electron";
 import path from "path";
+
 import { getStore } from "./store";
 
 const isDev = process.env.NODE_ENV !== "production";

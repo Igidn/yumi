@@ -1,5 +1,6 @@
-import { useState } from "react";
 import { EllipsisVertical } from "lucide-react";
+import { useState } from "react";
+
 import type { Book } from "../../shared/types";
 
 function progressLabel(book: Book): string {

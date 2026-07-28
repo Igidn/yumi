@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+
 import type { Book, ReaderChapter } from "../../shared/types";
 
 const FOCUSABLE_SELECTOR =

@@ -1,5 +1,5 @@
-import fs from "fs";
 import { DOMParser } from "@xmldom/xmldom";
+import fs from "fs";
 
 // ---------------------------------------------------------------------------
 // DOM helpers

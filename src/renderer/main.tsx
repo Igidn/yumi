@@ -1,8 +1,10 @@
+import "./globals.css";
+
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+
 import App from "./App";
 import { ReaderView } from "./views/ReaderView";
-import "./globals.css";
 
 // Excalidraw lazy-loads its fonts from window.EXCALIDRAW_ASSET_PATH (falling
 // back to a CDN). Point it at the vendored copies in public/ so the drawing

@@ -1,9 +1,10 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+
+import type { Book } from "../shared/types";
+import { DuplicatePrompt } from "./components/DuplicatePrompt";
+import { useImport } from "./hooks/useImport";
 import { LibraryView } from "./views/LibraryView";
 import { SettingsView } from "./views/SettingsView";
-import { useImport } from "./hooks/useImport";
-import { DuplicatePrompt } from "./components/DuplicatePrompt";
-import type { Book } from "../shared/types";
 
 type View = "library" | "settings";
 
