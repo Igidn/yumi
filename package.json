@@ -1,7 +1,7 @@
 {
   "name": "yumi",
   "version": "0.1.0",
-  "description": "Agent Powered Ebook reader",
+  "description": "A very cool ebook reader.",
   "author": "Igidn",
   "license": "MIT",
   "main": "dist/main/index.js",
