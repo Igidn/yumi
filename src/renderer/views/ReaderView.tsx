@@ -1,5 +1,11 @@
 import { List, Pen, Search, Undo2 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 
 import type { ReaderPayload } from "../../shared/types";
 import { AppearanceMenu } from "../reader/AppearanceMenu";
@@ -31,6 +37,14 @@ interface HistoryEntry {
 }
 
 const PROGRESS_SAVE_MS = 400;
+
+/** Book-wide column counts, keyed by layout signature. Module scope is fine:
+ *  each reader window is its own renderer process with one open book. */
+const colsCache: {
+  key: string;
+  payload: ReaderPayload | null;
+  cols: number[];
+} = { key: "", payload: null, cols: [] };
 
 /**
  * The standalone reader window root (Apple Books flow: library → cover click
@@ -334,29 +348,46 @@ export function ReaderView({ bookId }: { bookId: number }) {
     [showHeader, hideHeader],
   );
 
-  // Book-wide page offsets: remeasure every chapter when layout/typography changes.
-  // ponytail: DOM measure during render; chunk if 200+ chapter books jank on resize.
-  const colsByChapter = useMemo(() => {
-    if (!payload || !pageInfo) return null;
-    const layout = {
-      contentWidth: pageInfo.contentWidth,
-      contentHeight: pageInfo.contentHeight,
-      colWidth: pageInfo.colWidth,
-      colGap: pageInfo.colGap,
-    };
-    return payload.chapters.map((ch) =>
-      countChapterCols(ch, layout, settings.fontSize, settings.lineHeight),
-    );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    payload,
-    pageInfo?.contentWidth,
-    pageInfo?.contentHeight,
-    pageInfo?.colWidth,
-    pageInfo?.colGap,
-    settings.fontSize,
-    settings.lineHeight,
-  ]);
+  // Book-wide page offsets: remeasure every chapter when layout/typography
+  // changes. Chapter switches flap pageInfo through null with identical dims,
+  // so cache by layout signature — a switch hits the cache instead of
+  // re-laying-out every chapter (that synchronous remeasure was the
+  // chapter-switch stall). Measured in an effect: React compiler lint forbids
+  // writing the cache during render.
+  // ponytail: DOM measure of all chapters in one effect; chunk if 200+
+  // chapter books jank on resize/font change.
+  const [colsByChapter, setColsByChapter] = useState<number[] | null>(null);
+  const layoutKey = pageInfo
+    ? [
+        pageInfo.contentWidth,
+        pageInfo.contentHeight,
+        pageInfo.colWidth,
+        pageInfo.colGap,
+        settings.fontSize,
+        settings.lineHeight,
+      ].join("|")
+    : null;
+  useLayoutEffect(() => {
+    if (!payload || !pageInfo || !layoutKey) return;
+    let cols = colsCache.cols;
+    if (colsCache.key !== layoutKey || colsCache.payload !== payload) {
+      const layout = {
+        contentWidth: pageInfo.contentWidth,
+        contentHeight: pageInfo.contentHeight,
+        colWidth: pageInfo.colWidth,
+        colGap: pageInfo.colGap,
+      };
+      cols = payload.chapters.map((ch) =>
+        countChapterCols(ch, layout, settings.fontSize, settings.lineHeight),
+      );
+      colsCache.key = layoutKey;
+      colsCache.payload = payload;
+      colsCache.cols = cols;
+    }
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing state from an offscreen DOM measure, an external system React can't model.
+    setColsByChapter(cols);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- layoutKey encodes pageInfo dims + typography.
+  }, [payload, layoutKey]);
 
   // ---- render ------------------------------------------------------------
 
