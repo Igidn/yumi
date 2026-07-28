@@ -81,7 +81,7 @@ export function LibraryView({
     return books
       .filter((b) => b.progress > 0 && b.progress < 1)
       .sort((a, b) => compareBooks(a, b, { field: "recent", dir: "desc" }))
-      .slice(0, 4);
+      .slice(0, 5);
   }, [books, query]);
 
   const detailBook =
@@ -280,7 +280,7 @@ export function LibraryView({
 
           <section className="mt-10">
             {!query.trim() && <h2 className={sectionLabel}>All books</h2>}
-            <div className="mt-4 grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-x-6 gap-y-12">
+            <div className="mt-4 grid grid-cols-[repeat(auto-fill,140px)] gap-x-6 gap-y-12 justify-center">
               {visibleBooks.map((book) => (
                 <BookCard
                   key={book.id}
