@@ -87,44 +87,47 @@ export default function App() {
 
   return (
     <div className="h-screen overflow-hidden bg-page font-ui text-ink">
-      {/* Top strip + floating capsule navbar — the whole strip is the window drag region */}
-      <header className="app-drag fixed inset-x-0 top-0 z-10 flex justify-center pt-[13px]">
-        {/* Same max-width + padding as the search row below, so edges align */}
-        <div className="w-full max-w-[551px] px-4">
-          <div className="flex h-[44px] items-center justify-between rounded-[10px] bg-shell/80 px-4 shadow-shell backdrop-blur-sm">
-            <span className="select-none font-logo text-[15px] leading-none text-ink">
-              yumi
-            </span>
-            <nav
-              className="app-no-drag relative flex items-center gap-1.5"
-              ref={navRef}
-            >
-              <span
-                aria-hidden
-                className="pointer-events-none absolute top-0 h-full rounded-[6px] bg-pill shadow-shell transition-all duration-200 ease-out"
-                style={{ left: pill.left, width: pill.width }}
-              />
-              {NAV_ITEMS.map((item) => {
-                const active = view === item.id;
-                return (
-                  <button
-                    key={item.id}
-                    data-nav-active={active}
-                    onClick={() => setView(item.id)}
-                    className={`relative z-10 rounded-[6px] px-4 py-[9px] text-[12px] leading-none transition-colors ${
-                      active ? "text-ink" : "text-muted hover:text-ink"
-                    }`}
-                  >
-                    {item.label}
-                  </button>
-                );
-              })}
-            </nav>
-          </div>
+      {/* Slim top bar — the whole bar is the window drag region */}
+      <header className="app-drag fixed inset-x-0 top-0 z-10 border-b border-edge/60 bg-page">
+        {/* macOS traffic lights live at x:16 (main/windows.ts); clear them. */}
+        <div
+          className="container-app flex h-14 items-center justify-between"
+          style={
+            window.yumi.platform === "darwin" ? { paddingLeft: 84 } : undefined
+          }
+        >
+          <span className="select-none font-logo text-[15px] leading-none text-ink">
+            yumi
+          </span>
+          <nav
+            className="app-no-drag relative flex items-center gap-1.5"
+            ref={navRef}
+          >
+            <span
+              aria-hidden
+              className="pointer-events-none absolute top-0 h-full rounded-[6px] bg-pill transition-all duration-200 ease-out"
+              style={{ left: pill.left, width: pill.width }}
+            />
+            {NAV_ITEMS.map((item) => {
+              const active = view === item.id;
+              return (
+                <button
+                  key={item.id}
+                  data-nav-active={active}
+                  onClick={() => setView(item.id)}
+                  className={`relative z-10 rounded-[6px] px-4 py-[9px] text-[12px] leading-none transition-colors ${
+                    active ? "text-ink" : "text-muted hover:text-ink"
+                  }`}
+                >
+                  {item.label}
+                </button>
+              );
+            })}
+          </nav>
         </div>
       </header>
 
-      <main className="h-full overflow-auto pt-[83px] no-scrollbar">
+      <main className="h-full overflow-auto pt-[88px] no-scrollbar">
         {view === "library" && (
           <LibraryView
             onOpenBook={openBook}

@@ -1,6 +1,7 @@
 import {
   ArrowDownNarrowWide,
   ArrowUpNarrowWide,
+  BookOpen,
   Plus,
   Search,
 } from "lucide-react";
@@ -72,6 +73,16 @@ export function LibraryView({
     return [...filtered].sort((a, b) => compareBooks(a, b, sortKey));
   }, [books, query, sortKey]);
 
+  // The shelf: in-progress books, most recently opened first. Hidden while
+  // searching, since the filtered grid below already answers the query.
+  const shelf = useMemo(() => {
+    if (query.trim()) return [];
+    return books
+      .filter((b) => b.progress > 0 && b.progress < 1)
+      .sort((a, b) => compareBooks(a, b, { field: "recent", dir: "desc" }))
+      .slice(0, 10);
+  }, [books, query]);
+
   const detailBook =
     detailBookId === null
       ? null
@@ -96,38 +107,31 @@ export function LibraryView({
     }
   };
 
+  const sectionLabel =
+    "text-[11px] font-semibold uppercase tracking-[0.12em] text-muted";
+
   return (
-    <div className="pb-16">
-      {/* Search + sort + import row */}
-      <div className="mx-auto -mt-3 flex w-full max-w-[551px] gap-[6px] px-4">
+    <div className="container-app pb-20">
+      <div className="flex gap-2">
         <div className="relative flex-1">
-          <span className="pointer-events-none absolute left-[12px] top-1/2 -translate-y-1/2 text-muted">
-            <Search size={18} strokeWidth={2} />
+          <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted">
+            <Search size={16} strokeWidth={2} />
           </span>
           <input
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search"
-            className="h-[36px] w-full rounded-[8px] border border-edge bg-field pl-[38px] pr-3 text-[13px] text-ink outline-none placeholder:text-muted focus:border-muted"
+            placeholder="Search title or author"
+            className="h-9 w-full rounded-[8px] border border-edge bg-field pl-9 pr-3 text-[13px] text-ink outline-none transition-colors placeholder:text-muted focus:border-accent/60"
           />
         </div>
-        <button
-          onClick={handleImport}
-          disabled={importing}
-          className="app-no-drag flex h-[36px] shrink-0 items-center gap-1.5 rounded-[8px] border border-edge bg-field px-4 text-[12px] text-ink transition-colors hover:text-ink disabled:opacity-60"
-          aria-label="Import a book"
-        >
-          <Plus size={14} strokeWidth={2} />
-          <span>{importing ? "Importing…" : "Import"}</span>
-        </button>
         <div className="relative shrink-0">
           <button
             ref={sortTriggerRef}
             onClick={() => setSortOpen((v) => !v)}
             aria-haspopup="menu"
             aria-expanded={sortOpen}
-            className="flex h-[36px] items-center gap-1.5 rounded-[8px] border border-edge bg-field px-3 text-[12px] text-ink transition-colors hover:text-ink"
+            className="flex h-9 items-center gap-1.5 rounded-[8px] border border-edge bg-field px-3 text-[12px] text-ink transition-colors hover:border-muted"
           >
             <span className="text-muted">Sort:</span>
             <span>
@@ -156,13 +160,19 @@ export function LibraryView({
             />
           )}
         </div>
+        <button
+          onClick={handleImport}
+          disabled={importing}
+          className="app-no-drag flex h-9 shrink-0 items-center gap-1.5 rounded-[8px] bg-accent px-4 text-[12px] font-semibold text-on-accent transition-[filter] hover:brightness-110 disabled:opacity-60"
+          aria-label="Import a book"
+        >
+          <Plus size={14} strokeWidth={2.5} />
+          <span>{importing ? "Importing…" : "Import"}</span>
+        </button>
       </div>
 
       {importMessage && (
-        <p
-          className="mx-auto mt-3 w-full max-w-[551px] px-4 text-[12px] text-muted"
-          role="status"
-        >
+        <p className="mt-3 text-[12px] text-muted" role="status">
           {importMessage}
         </p>
       )}
@@ -210,22 +220,70 @@ export function LibraryView({
         />
       )}
 
-      {/* Book grid */}
-      {visibleBooks.length === 0 ? (
-        <p className="mt-[40px] text-center text-[13px] text-muted">
-          {books.length === 0 ? "No books yet." : "No books match your search."}
-        </p>
-      ) : (
-        <div className="mt-[31px] grid grid-cols-[repeat(auto-fill,170px)] justify-center gap-x-[55px] gap-y-[48px] px-6">
-          {visibleBooks.map((book) => (
-            <BookCard
-              key={book.id}
-              book={book}
-              onOpen={() => onOpenBook(book)}
-              onMenu={(pos) => setMenu({ book, ...pos })}
-            />
-          ))}
+      {books.length === 0 ? (
+        /* Empty library: give the import action somewhere to live. */
+        <div className="flex flex-col items-center pt-[72px] text-center">
+          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-shell">
+            <BookOpen size={26} strokeWidth={1.5} className="text-muted" />
+          </div>
+          <p className="mt-5 text-[15px] font-semibold text-ink">
+            Your library is empty
+          </p>
+          <p className="mt-1.5 max-w-[300px] text-[13px] leading-relaxed text-muted">
+            Drop an .epub file anywhere in this window, or browse your folders
+            for one.
+          </p>
+          <button
+            onClick={handleImport}
+            disabled={importing}
+            className="mt-6 flex h-9 items-center gap-1.5 rounded-[8px] bg-accent px-4 text-[12px] font-semibold text-on-accent transition-[filter] hover:brightness-110 disabled:opacity-60"
+          >
+            <Plus size={14} strokeWidth={2.5} />
+            {importing ? "Importing…" : "Import a book"}
+          </button>
         </div>
+      ) : visibleBooks.length === 0 ? (
+        <div className="pt-16 text-center">
+          <p className="text-[14px] text-ink">
+            Nothing matches &ldquo;{query.trim()}&rdquo;
+          </p>
+          <p className="mt-1 text-[12px] text-muted">
+            Try a different title or author.
+          </p>
+        </div>
+      ) : (
+        <>
+          {shelf.length > 0 && (
+            <section className="mt-9">
+              <h2 className={sectionLabel}>Continue reading</h2>
+              <div className="no-scrollbar -mx-8 mt-4 flex gap-6 overflow-x-auto px-8 pb-1">
+                {shelf.map((book) => (
+                  <div key={book.id} className="w-[140px] shrink-0">
+                    <BookCard
+                      book={book}
+                      onOpen={() => onOpenBook(book)}
+                      onMenu={(pos) => setMenu({ book, ...pos })}
+                    />
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          <section className="mt-10">
+            {shelf.length > 0 && <h2 className={sectionLabel}>All books</h2>}
+            <div className="mt-4 grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-x-6 gap-y-12">
+              {visibleBooks.map((book) => (
+                <BookCard
+                  key={book.id}
+                  book={book}
+                  onOpen={() => onOpenBook(book)}
+                  onMenu={(pos) => setMenu({ book, ...pos })}
+                />
+              ))}
+            </div>
+          </section>
+        </>
       )}
     </div>
   );

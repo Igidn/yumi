@@ -9,6 +9,10 @@
   --color-edge: #3c3934; /* field border */
   --color-ink: #e8e3db; /* primary text */
   --color-muted: #8a857c; /* secondary text + icons */
+  /* The single accent: reading-lamp amber. Progress fills, the primary
+     Import action, focus rings. Nothing else. */
+  --color-accent: oklch(0.79 0.105 78);
+  --color-on-accent: oklch(0.25 0.025 70);
 
   --font-logo: "Sono", ui-monospace, monospace;
   --font-ui: "Sora", ui-sans-serif, system-ui, sans-serif;
@@ -73,6 +77,14 @@
 }
 @utility border-reader-edge {
   border-color: var(--reader-edge);
+}
+
+/* One shared page container so the top bar, library, and settings align.
+   Fluid up to a generous cap so grids scale with the window. */
+@utility container-app {
+  margin-inline: auto;
+  max-width: 1600px;
+  padding-inline: 2rem;
 }
 
 @utility no-scrollbar {
