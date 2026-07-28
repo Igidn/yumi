@@ -1,10 +1,6 @@
 import { DOMParser } from "@xmldom/xmldom";
 import fs from "fs";
 
-// ---------------------------------------------------------------------------
-// DOM helpers
-// ---------------------------------------------------------------------------
-
 export function parseXml(xml: string, mimeType = "application/xml"): Document {
   return new DOMParser().parseFromString(xml, mimeType) as unknown as Document;
 }
@@ -12,10 +8,6 @@ export function parseXml(xml: string, mimeType = "application/xml"): Document {
 export function textOf(node: Element): string {
   return (node.textContent || "").replace(/\s+/g, " ").trim();
 }
-
-// ---------------------------------------------------------------------------
-// Metadata extraction
-// ---------------------------------------------------------------------------
 
 export function parseMetadata(opfDoc: Document): {
   title: string;
@@ -37,10 +29,6 @@ function getElementText(xml: Element, tag: string): string {
   const el = found[0];
   return (el.textContent || "").trim();
 }
-
-// ---------------------------------------------------------------------------
-// Path helpers
-// ---------------------------------------------------------------------------
 
 export function resolveHref(base: string, rel: string): string {
   const baseDir = base.includes("/")
@@ -67,10 +55,6 @@ export function pathExt(href: string): string {
   if (dot < 0) return "";
   return base.slice(dot + 1).toLowerCase();
 }
-
-// ---------------------------------------------------------------------------
-// Image dimension parser
-// ---------------------------------------------------------------------------
 
 /** Read {width, height} from an image file on disk. Handles PNG, JPEG, GIF,
  *  WebP, and BMP — the formats found in EPUBs. Returns null on any failure
@@ -185,10 +169,6 @@ export function getImageDimensions(
   }
 }
 
-// ---------------------------------------------------------------------------
-// Cover helpers
-// ---------------------------------------------------------------------------
-
 export function extFromCover(
   coverHref: string,
   mime: string | undefined,
@@ -205,10 +185,6 @@ export function extFromCover(
   const ext = pathExt(coverHref);
   return ext || "img";
 }
-
-// ---------------------------------------------------------------------------
-// Chapter title fallback
-// ---------------------------------------------------------------------------
 
 export function chapterTitle(doc: Document, fallback: string): string {
   const h1 =

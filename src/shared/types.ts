@@ -30,8 +30,6 @@ export type YumiEvent =
   | "window:leaveFullScreen"
   | "drawing:scene-updated";
 
-// --- Drawing system types ---
-
 export interface DrawingTab {
   id: string;
   label: string;

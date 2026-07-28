@@ -39,8 +39,6 @@ export function getDrawingsDb(): Database.Database {
   return db;
 }
 
-// --- Tabs ---
-
 /** Tab list for the strip; scene blobs are loaded separately, per tab. */
 export function loadTabs(): DrawingTab[] {
   const d = getDrawingsDb();
@@ -68,8 +66,6 @@ export function renameTab(tabId: string, label: string): void {
 export function deleteTab(tabId: string): void {
   getDrawingsDb().prepare("DELETE FROM tabs WHERE id = ?").run(tabId);
 }
-
-// --- Scenes ---
 
 /** Raw scene JSON for one tab, or null when the canvas was never drawn on. */
 export function loadScene(tabId: string): string | null {

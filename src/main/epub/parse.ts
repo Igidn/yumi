@@ -16,10 +16,6 @@ import {
   stripFragment,
 } from "./util";
 
-// ---------------------------------------------------------------------------
-// Cover extraction
-// ---------------------------------------------------------------------------
-
 /** Pull cover image bytes out of an already-opened Epub. */
 async function coverOf(epub: Epub): Promise<EpubCover | null> {
   const coverHref = epub.coverHref;
@@ -34,10 +30,6 @@ async function coverOf(epub: Epub): Promise<EpubCover | null> {
     return null;
   }
 }
-
-// ---------------------------------------------------------------------------
-// Public API
-// ---------------------------------------------------------------------------
 
 /**
  * Lightweight import-time read: title, author, cover. Skips chapter parsing.
@@ -189,10 +181,6 @@ export async function parseEpub(
     epub.destroy();
   }
 }
-
-// ---------------------------------------------------------------------------
-// Internal helpers
-// ---------------------------------------------------------------------------
 
 async function extractImages(
   epub: Epub,

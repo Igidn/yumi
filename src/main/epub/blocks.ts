@@ -2,10 +2,6 @@ import { makeBlock } from "./html-serialize";
 import type { ContentBlock, LinkTarget } from "./types";
 import { resolveHref, textOf } from "./util";
 
-// ---------------------------------------------------------------------------
-// Block extraction from XHTML body
-// ---------------------------------------------------------------------------
-
 export function extractBlocks(
   doc: Document,
   imageMap?: Map<string, string>,
@@ -114,10 +110,6 @@ export function extractBlocks(
   walk(body);
   return blocks;
 }
-
-// ---------------------------------------------------------------------------
-// Link resolver for cross-chapter <a> links
-// ---------------------------------------------------------------------------
 
 export function makeLinkResolver(
   docFullPath: string,

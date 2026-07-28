@@ -85,8 +85,6 @@ export function ReaderView({ bookId }: { bookId: number }) {
   const progressRef = useRef({ chapterPos: 0, chapterId: 0, fraction: 0 });
   const saveTimer = useRef<number | null>(null);
 
-  // ---- loading ----------------------------------------------------------
-
   useEffect(() => {
     let cancelled = false;
     void loadReaderSettings().then((s) => {
@@ -113,8 +111,6 @@ export function ReaderView({ bookId }: { bookId: number }) {
       cancelled = true;
     };
   }, [bookId]);
-
-  // ---- progress persistence --------------------------------------------
 
   const flushProgress = useCallback(() => {
     const data = payloadRef.current;
@@ -148,8 +144,6 @@ export function ReaderView({ bookId }: { bookId: number }) {
       flushProgress();
     };
   }, [flushProgress]);
-
-  // ---- navigation --------------------------------------------------------
 
   const goToChapter = useCallback(
     (pos: number, fraction: number, keepJump?: boolean) => {
@@ -301,8 +295,6 @@ export function ReaderView({ bookId }: { bookId: number }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [chapterPos, goToChapter]);
 
-  // ---- fullscreen tracking (macOS traffic light visibility) --------
-
   useEffect(() => {
     if (!isMac) return;
     window.yumi.isFullScreen().then(setIsFullScreen);
@@ -317,8 +309,6 @@ export function ReaderView({ bookId }: { bookId: number }) {
       unlistenLeave();
     };
   }, [isMac]);
-
-  // ---- header hover visibility --------------------------------------
 
   const showHeader = useCallback(() => {
     headerHoverRef.current = true;
@@ -388,8 +378,6 @@ export function ReaderView({ bookId }: { bookId: number }) {
     setColsByChapter(cols);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- layoutKey encodes pageInfo dims + typography.
   }, [payload, layoutKey]);
-
-  // ---- render ------------------------------------------------------------
 
   const theme = settings.theme;
 
