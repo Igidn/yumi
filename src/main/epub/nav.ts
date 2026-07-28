@@ -2,10 +2,6 @@ import type { Epub } from "./epub-class";
 import { XHTML_NS } from "./types";
 import { resolveHref } from "./util";
 
-// ---------------------------------------------------------------------------
-// Navigation / TOC parsing
-// ---------------------------------------------------------------------------
-
 /** Parse EPUB3 nav.xhtml's <nav epub:type="toc"> into a flat list. */
 export function parseNavXhtml(
   navEl: Element,
