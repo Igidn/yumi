@@ -7,7 +7,9 @@ import { resolveHref } from "./util";
 // ---------------------------------------------------------------------------
 
 /** Parse EPUB3 nav.xhtml's <nav epub:type="toc"> into a flat list. */
-export function parseNavXhtml(navEl: Element): { label: string; href: string }[] {
+export function parseNavXhtml(
+  navEl: Element,
+): { label: string; href: string }[] {
   const out: { label: string; href: string }[] = [];
 
   function walkOl(ol: Element): void {
@@ -60,7 +62,9 @@ export function parseNcx(doc: Document): { label: string; href: string }[] {
 }
 
 /** Load and parse the EPUB navigation (EPUB3 nav.xhtml preferred, EPUB2 NCX fallback). */
-export async function loadNav(epub: Epub): Promise<{ label: string; href: string }[]> {
+export async function loadNav(
+  epub: Epub,
+): Promise<{ label: string; href: string }[]> {
   // EPUB3 nav.xhtml
   if (epub.navPath) {
     try {
@@ -70,7 +74,7 @@ export async function loadNav(epub: Epub): Promise<{ label: string; href: string
         const navEl = navEls[i];
         const epubType = navEl.getAttributeNS(
           "http://www.idpf.org/2007/ops",
-          "type"
+          "type",
         );
         if (!epubType || !epubType.split(/\s+/).includes("toc")) continue;
         const entries = parseNavXhtml(navEl);
@@ -108,6 +112,8 @@ export async function loadNav(epub: Epub): Promise<{ label: string; href: string
     }
   }
 
-  console.warn("[epub] nav parse failed for both nav.xhtml and NCX; falling back to spine walk");
+  console.warn(
+    "[epub] nav parse failed for both nav.xhtml and NCX; falling back to spine walk",
+  );
   return [];
 }

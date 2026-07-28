@@ -1,6 +1,6 @@
 import { makeBlock } from "./html-serialize";
 import type { ContentBlock, LinkTarget } from "./types";
-import { resolveHref,textOf } from "./util";
+import { resolveHref, textOf } from "./util";
 
 // ---------------------------------------------------------------------------
 // Block extraction from XHTML body
@@ -10,7 +10,7 @@ export function extractBlocks(
   doc: Document,
   imageMap?: Map<string, string>,
   docHref?: string,
-  linkResolver?: (href: string) => LinkTarget | null
+  linkResolver?: (href: string) => LinkTarget | null,
 ): ContentBlock[] {
   const body =
     doc.getElementsByTagName("body")[0] ||
@@ -52,7 +52,13 @@ export function extractBlocks(
       if (skip.has(nsLocal)) continue;
 
       if (/^h[1-6]$/.test(nsLocal)) {
-        const block = makeBlock("heading", node, +nsLocal[1], linkResolver, childFragment);
+        const block = makeBlock(
+          "heading",
+          node,
+          +nsLocal[1],
+          linkResolver,
+          childFragment,
+        );
         if (block) blocks.push(block);
         continue;
       }
@@ -64,7 +70,13 @@ export function extractBlocks(
           if (block) blocks.push(block);
           continue;
         }
-        const block = makeBlock("paragraph", node, undefined, linkResolver, childFragment);
+        const block = makeBlock(
+          "paragraph",
+          node,
+          undefined,
+          linkResolver,
+          childFragment,
+        );
         if (block) blocks.push(block);
         continue;
       }
@@ -77,13 +89,20 @@ export function extractBlocks(
 
       if (nsLocal === "figure") {
         const imgs = node.getElementsByTagName("img");
-        const block = imgs.length > 0 ? imageBlock(imgs[0], childFragment) : null;
+        const block =
+          imgs.length > 0 ? imageBlock(imgs[0], childFragment) : null;
         if (block) blocks.push(block);
         continue;
       }
 
       if (nsLocal === "li") {
-        const block = makeBlock("paragraph", node, undefined, linkResolver, childFragment);
+        const block = makeBlock(
+          "paragraph",
+          node,
+          undefined,
+          linkResolver,
+          childFragment,
+        );
         if (block) blocks.push(block);
         continue;
       }
@@ -103,7 +122,7 @@ export function extractBlocks(
 export function makeLinkResolver(
   docFullPath: string,
   spineToChapter: Map<string, number>,
-  chapterIndex: number
+  chapterIndex: number,
 ): (href: string) => LinkTarget | null {
   return (href: string): LinkTarget | null => {
     if (href.startsWith("#")) return { chapterIndex, fragment: href.slice(1) };

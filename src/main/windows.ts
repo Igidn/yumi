@@ -43,7 +43,10 @@ async function loadRenderer(win: BrowserWindow, query?: string): Promise<void> {
   }
 }
 
-function trackBounds(win: BrowserWindow, key: "windowBounds" | "readerWindowBounds"): void {
+function trackBounds(
+  win: BrowserWindow,
+  key: "windowBounds" | "readerWindowBounds",
+): void {
   const save = async () => {
     if (win.isDestroyed()) return;
     const store = await getStore();
@@ -78,7 +81,7 @@ function baseWindowOptions(bounds: {
 }
 
 export async function createMainWindow(
-  opts: WindowOptions = {}
+  opts: WindowOptions = {},
 ): Promise<BrowserWindow> {
   const store = await getStore();
   const win = new BrowserWindow({
@@ -107,7 +110,7 @@ export async function createMainWindow(
  */
 export async function openReaderWindow(
   bookId: number,
-  title: string
+  title: string,
 ): Promise<void> {
   const existing = readerWindows.get(bookId);
   if (existing && !existing.isDestroyed()) {

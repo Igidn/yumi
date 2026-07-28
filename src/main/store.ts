@@ -28,7 +28,7 @@ export async function getStore(): Promise<TypedStore> {
   // into `require()`, which fails for ESM-only packages, so force a real
   // dynamic import through `Function`.
   const modulePromise = new Function(
-    'return import("electron-store")'
+    'return import("electron-store")',
   )() as Promise<{ default: typeof Store }>;
   const { default: StoreConstructor } = await modulePromise;
   const instance = new StoreConstructor<StoreSchema>({

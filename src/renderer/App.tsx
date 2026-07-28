@@ -33,7 +33,7 @@ export default function App() {
 
   useLayoutEffect(() => {
     const active = navRef.current?.querySelector<HTMLElement>(
-      '[data-nav-active="true"]'
+      '[data-nav-active="true"]',
     );
     if (active) setPill({ left: active.offsetLeft, width: active.offsetWidth });
   }, [view]);
@@ -95,7 +95,10 @@ export default function App() {
             <span className="select-none font-logo text-[15px] leading-none text-ink">
               yumi
             </span>
-            <nav className="app-no-drag relative flex items-center gap-1.5" ref={navRef}>
+            <nav
+              className="app-no-drag relative flex items-center gap-1.5"
+              ref={navRef}
+            >
               <span
                 aria-hidden
                 className="pointer-events-none absolute top-0 h-full rounded-[6px] bg-pill shadow-shell transition-all duration-200 ease-out"

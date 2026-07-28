@@ -207,10 +207,7 @@ export interface YumiAPI {
   /**
    * Subscribe to a main-process event. Returns an unsubscribe function.
    */
-  on(
-    event: string,
-    listener: (...args: unknown[]) => void
-  ): () => void;
+  on(event: string, listener: (...args: unknown[]) => void): () => void;
   /** Check whether the window is in macOS native fullscreen. */
   isFullScreen: () => Promise<boolean>;
 }

@@ -84,7 +84,7 @@ function uniqueDestination(destDir: string, filename: string): string {
  */
 export async function importBook(
   sourcePath: string,
-  duplicateHandling: "skip" | "replace" | "prompt" = "prompt"
+  duplicateHandling: "skip" | "replace" | "prompt" = "prompt",
 ): Promise<ImportOutcome> {
   const abs = path.resolve(sourcePath);
   if (!fs.existsSync(abs)) {
@@ -98,7 +98,7 @@ export async function importBook(
   const format = getFormatForFile(abs);
   if (!format) {
     throw new Error(
-      `Unsupported file format: ${path.extname(abs) || "(no extension)"}`
+      `Unsupported file format: ${path.extname(abs) || "(no extension)"}`,
     );
   }
 

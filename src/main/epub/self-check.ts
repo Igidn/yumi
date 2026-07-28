@@ -1,4 +1,4 @@
-import { parseEpub,readEpubMeta } from "./parse";
+import { parseEpub, readEpubMeta } from "./parse";
 import type { ContentBlock } from "./types";
 
 async function main(): Promise<void> {
@@ -9,11 +9,11 @@ async function main(): Promise<void> {
   }
   const meta = await readEpubMeta(file);
   console.log(
-    `meta title="${meta.title}" author="${meta.author}" cover=${meta.cover ? meta.cover.ext + " " + meta.cover.data.length + "b" : "none"}`
+    `meta title="${meta.title}" author="${meta.author}" cover=${meta.cover ? meta.cover.ext + " " + meta.cover.data.length + "b" : "none"}`,
   );
   const parsed = await parseEpub(file);
   console.log(
-    `title="${parsed.title}" author="${parsed.author}" chapters=${parsed.chapters.length}`
+    `title="${parsed.title}" author="${parsed.author}" chapters=${parsed.chapters.length}`,
   );
   const first = parsed.chapters[0];
   if (first) {

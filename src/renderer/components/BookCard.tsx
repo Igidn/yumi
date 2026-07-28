@@ -9,14 +9,22 @@ function progressLabel(book: Book): string {
     : `${Math.round(book.progress * 100)}%`;
 }
 
-function CoverPlaceholder({ title, author }: { title: string; author: string }) {
+function CoverPlaceholder({
+  title,
+  author,
+}: {
+  title: string;
+  author: string;
+}) {
   return (
     <div className="flex h-full w-full flex-col justify-end bg-shell p-3 text-left">
       <span className="line-clamp-4 text-[13px] font-medium leading-snug text-ink">
         {title || "Untitled"}
       </span>
       {author ? (
-        <span className="mt-1 line-clamp-2 text-[11px] text-muted">{author}</span>
+        <span className="mt-1 line-clamp-2 text-[11px] text-muted">
+          {author}
+        </span>
       ) : null}
     </div>
   );

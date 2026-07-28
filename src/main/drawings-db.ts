@@ -54,7 +54,7 @@ export function createTab(label: string): DrawingTab {
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
   d.prepare(
-    "INSERT INTO tabs (id, label, created_at, scene_data) VALUES (?, ?, ?, NULL)"
+    "INSERT INTO tabs (id, label, created_at, scene_data) VALUES (?, ?, ?, NULL)",
   ).run(id, label, now);
   return { id, label, createdAt: now };
 }

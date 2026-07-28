@@ -28,7 +28,7 @@ function blocksFromRaw(rawText: string): ContentBlock[] {
 async function doParseEpub(
   bookId: number,
   sourcePath: string,
-  scrollByTitle?: Map<string, number>
+  scrollByTitle?: Map<string, number>,
 ) {
   const db = await getDb();
   const parsed = await parseEpub(sourcePath, bookId);
@@ -63,7 +63,7 @@ async function doParseEpub(
 async function ensureChapters(
   bookId: number,
   format: string,
-  sourcePath: string
+  sourcePath: string,
 ) {
   const db = await getDb();
   const existing = await db
@@ -74,7 +74,7 @@ async function ensureChapters(
 
   if (existing.length > 0) {
     const looksBuggy = existing.some(
-      (c, i) => i > 0 && c.title === existing[i - 1].title
+      (c, i) => i > 0 && c.title === existing[i - 1].title,
     );
     if (!looksBuggy || format !== "epub") return existing;
 
@@ -152,7 +152,7 @@ export async function loadReaderBook(bookId: number): Promise<ReaderPayload> {
       ? 0
       : Math.min(
           Math.floor(book.progress * readerChapters.length),
-          readerChapters.length - 1
+          readerChapters.length - 1,
         );
 
   return {

@@ -1,4 +1,9 @@
-import { ArrowDownNarrowWide, ArrowUpNarrowWide, Plus, Search } from "lucide-react";
+import {
+  ArrowDownNarrowWide,
+  ArrowUpNarrowWide,
+  Plus,
+  Search,
+} from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { Book } from "../../shared/types";
@@ -84,7 +89,9 @@ export function LibraryView({
     } else {
       setImportMessage(
         `Imported ${result.ok} ${result.ok === 1 ? "book" : "books"}` +
-          (result.skipped > 0 ? `, skipped ${result.skipped} duplicate${result.skipped === 1 ? "" : "s"}` : ""),
+          (result.skipped > 0
+            ? `, skipped ${result.skipped} duplicate${result.skipped === 1 ? "" : "s"}`
+            : ""),
       );
     }
   };

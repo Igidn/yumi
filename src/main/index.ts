@@ -3,7 +3,7 @@ import path from "path";
 import { pathToFileURL } from "url";
 
 import { importBook } from "./import";
-import { broadcastEvent,registerIpcHandlers } from "./ipc";
+import { broadcastEvent, registerIpcHandlers } from "./ipc";
 import { getUserDataPath } from "./paths";
 import { createMainWindow } from "./windows";
 
@@ -37,7 +37,11 @@ let mainWindow: BrowserWindow | null = null;
 
 app.on("open-file", (event, filePath) => {
   event.preventDefault();
-  if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.webContents.isLoading()) {
+  if (
+    mainWindow &&
+    !mainWindow.isDestroyed() &&
+    !mainWindow.webContents.isLoading()
+  ) {
     void handleOpenFile(filePath);
     return;
   }

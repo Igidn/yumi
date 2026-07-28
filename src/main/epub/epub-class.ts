@@ -1,11 +1,15 @@
 import fs from "fs";
 import JSZip from "jszip";
 
-import { parseMetadata, parseXml, pathExt,resolveHref } from "./util";
+import { parseMetadata, parseXml, pathExt, resolveHref } from "./util";
 
 const MIME_BY_EXT: Record<string, string> = {
-  jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png",
-  gif: "image/gif", webp: "image/webp", svg: "image/svg+xml",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  png: "image/png",
+  gif: "image/gif",
+  webp: "image/webp",
+  svg: "image/svg+xml",
   bmp: "image/bmp",
 };
 
@@ -44,16 +48,21 @@ export class Epub {
     }
 
     // Parse container.xml
-    const containerXml = await zip.file("META-INF/container.xml")?.async("string");
+    const containerXml = await zip
+      .file("META-INF/container.xml")
+      ?.async("string");
     if (!containerXml) throw new Error("Invalid EPUB: missing container.xml");
     const containerDoc = parseXml(containerXml);
     const rootfile = containerDoc.getElementsByTagName("rootfile")[0];
-    if (!rootfile) throw new Error("Invalid EPUB: no rootfile in container.xml");
+    if (!rootfile)
+      throw new Error("Invalid EPUB: no rootfile in container.xml");
     const opfPath = rootfile.getAttribute("full-path") || "";
 
     const epub = new Epub(zip);
     epub.fileMap = fileMap;
-    epub.opfDir = opfPath.includes("/") ? opfPath.substring(0, opfPath.lastIndexOf("/") + 1) : "";
+    epub.opfDir = opfPath.includes("/")
+      ? opfPath.substring(0, opfPath.lastIndexOf("/") + 1)
+      : "";
 
     // Parse OPF
     const opfXmlStr = await epub.readText(opfPath);
@@ -64,7 +73,10 @@ export class Epub {
     epub.metadata = parseMetadata(opfDoc);
 
     // Manifest: id → { href, mediaType, properties }
-    const manifest = new Map<string, { href: string; mediaType: string; properties: string[] }>();
+    const manifest = new Map<
+      string,
+      { href: string; mediaType: string; properties: string[] }
+    >();
     const manifestNode = opfDoc.getElementsByTagName("manifest")[0];
     if (manifestNode) {
       const items = manifestNode.getElementsByTagName("item");
@@ -73,7 +85,9 @@ export class Epub {
         const id = item.getAttribute("id") || "";
         const href = item.getAttribute("href") || "";
         const mediaType = item.getAttribute("media-type") || "";
-        const props = (item.getAttribute("properties") || "").split(/\s+/).filter(Boolean);
+        const props = (item.getAttribute("properties") || "")
+          .split(/\s+/)
+          .filter(Boolean);
         manifest.set(id, { href, mediaType, properties: props });
 
         if (props.includes("nav")) epub.navPath = href;
@@ -150,7 +164,7 @@ export class Epub {
     const resolved = this.resolve(href).replace(/^\/+/, "");
     const text = await this.readText(resolved);
     if (text === null) throw new Error(`File not found in EPUB: ${resolved}`);
-    const clean = text.charCodeAt(0) === 0xFEFF ? text.slice(1) : text;
+    const clean = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
     return parseXml(clean, "application/xhtml+xml");
   }
 

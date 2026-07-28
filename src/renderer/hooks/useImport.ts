@@ -81,7 +81,7 @@ export function useImport() {
       }
       return result;
     },
-    []
+    [],
   );
 
   return {

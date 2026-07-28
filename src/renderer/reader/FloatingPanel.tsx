@@ -1,5 +1,14 @@
-import { Copy, Eraser,Minus, Pen, Pencil, Plus, Trash2, X } from "lucide-react";
-import { useCallback, useEffect, useRef,useState } from "react";
+import {
+  Copy,
+  Eraser,
+  Minus,
+  Pen,
+  Pencil,
+  Plus,
+  Trash2,
+  X,
+} from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { DrawingTab } from "../../shared/types";
 import { DrawingSurface } from "./DrawingSurface";
@@ -74,7 +83,9 @@ interface FloatingPanelProps {
 }
 
 export function FloatingPanel({ isOpen, onClose }: FloatingPanelProps) {
-  const [rect, setRect] = useState<PanelRect>(() => loadPanelState() ?? DEFAULT_RECT);
+  const [rect, setRect] = useState<PanelRect>(
+    () => loadPanelState() ?? DEFAULT_RECT,
+  );
   const [minimized, setMinimized] = useState(false);
   const [tabs, setTabs] = useState<DrawingTab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
@@ -100,7 +111,9 @@ export function FloatingPanel({ isOpen, onClose }: FloatingPanelProps) {
 
       // Auto-create first tab if none exist.
       if (loaded.length === 0) {
-        const first = await window.yumi.invoke("drawing:create-tab", { label: "Canvas 1" });
+        const first = await window.yumi.invoke("drawing:create-tab", {
+          label: "Canvas 1",
+        });
         if (cancelled) return;
         loaded = [first];
       }
@@ -110,11 +123,13 @@ export function FloatingPanel({ isOpen, onClose }: FloatingPanelProps) {
       // Restore last active tab, or default to first.
       const saved = localStorage.getItem(ACTIVE_TAB_KEY);
       setActiveTabId(
-        saved && loaded.some((t) => t.id === saved) ? saved : loaded[0].id
+        saved && loaded.some((t) => t.id === saved) ? saved : loaded[0].id,
       );
     })();
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [isOpen]);
 
   useEffect(() => {
@@ -166,7 +181,7 @@ export function FloatingPanel({ isOpen, onClose }: FloatingPanelProps) {
     try {
       await window.yumi.invoke("drawing:rename-tab", { tabId, label });
       setTabs((prev) =>
-        prev.map((t) => (t.id === tabId ? { ...t, label } : t))
+        prev.map((t) => (t.id === tabId ? { ...t, label } : t)),
       );
     } catch (err) {
       console.error(err);
@@ -174,43 +189,51 @@ export function FloatingPanel({ isOpen, onClose }: FloatingPanelProps) {
     setEditingTabId(null);
   }, [editingTabId, editingLabel]);
 
-  const handleDeleteTab = useCallback(async (tabId: string) => {
-    setCtxMenu(null);
-    if (tabs.length <= 1) return; // keep at least one tab
-    if (!window.confirm("Delete this canvas and all its drawings?")) return;
+  const handleDeleteTab = useCallback(
+    async (tabId: string) => {
+      setCtxMenu(null);
+      if (tabs.length <= 1) return; // keep at least one tab
+      if (!window.confirm("Delete this canvas and all its drawings?")) return;
 
-    try {
-      await window.yumi.invoke("drawing:delete-tab", { tabId });
-      const remaining = tabs.filter((t) => t.id !== tabId);
-      setTabs(remaining);
-      if (activeTabId === tabId) setActiveTabId(remaining[0].id);
-    } catch (err) {
-      console.error(err);
-    }
-  }, [tabs, activeTabId]);
-
-  const handleDuplicateTab = useCallback(async (tabId: string) => {
-    setCtxMenu(null);
-    const src = tabs.find((t) => t.id === tabId);
-    if (!src) return;
-
-    try {
-      const sceneData = await window.yumi.invoke("drawing:load-scene", { tabId });
-      const newTab = await window.yumi.invoke("drawing:create-tab", {
-        label: `${src.label} (copy)`,
-      });
-      if (sceneData) {
-        await window.yumi.invoke("drawing:save-scene", {
-          tabId: newTab.id,
-          sceneData,
-        });
+      try {
+        await window.yumi.invoke("drawing:delete-tab", { tabId });
+        const remaining = tabs.filter((t) => t.id !== tabId);
+        setTabs(remaining);
+        if (activeTabId === tabId) setActiveTabId(remaining[0].id);
+      } catch (err) {
+        console.error(err);
       }
-      setTabs((prev) => [...prev, newTab]);
-      setActiveTabId(newTab.id);
-    } catch (err) {
-      console.error(err);
-    }
-  }, [tabs]);
+    },
+    [tabs, activeTabId],
+  );
+
+  const handleDuplicateTab = useCallback(
+    async (tabId: string) => {
+      setCtxMenu(null);
+      const src = tabs.find((t) => t.id === tabId);
+      if (!src) return;
+
+      try {
+        const sceneData = await window.yumi.invoke("drawing:load-scene", {
+          tabId,
+        });
+        const newTab = await window.yumi.invoke("drawing:create-tab", {
+          label: `${src.label} (copy)`,
+        });
+        if (sceneData) {
+          await window.yumi.invoke("drawing:save-scene", {
+            tabId: newTab.id,
+            sceneData,
+          });
+        }
+        setTabs((prev) => [...prev, newTab]);
+        setActiveTabId(newTab.id);
+      } catch (err) {
+        console.error(err);
+      }
+    },
+    [tabs],
+  );
 
   const handleClearTab = useCallback(
     async (tabId: string) => {
@@ -225,7 +248,7 @@ export function FloatingPanel({ isOpen, onClose }: FloatingPanelProps) {
         console.error(err);
       }
     },
-    [activeTabId]
+    [activeTabId],
   );
 
   const onDragStart = useCallback(
@@ -251,9 +274,8 @@ export function FloatingPanel({ isOpen, onClose }: FloatingPanelProps) {
       window.addEventListener("pointermove", onMove);
       window.addEventListener("pointerup", onUp, { once: true });
     },
-    [rect]
+    [rect],
   );
-
 
   const onResizeStart = useCallback(
     (dir: ResizeDir, e: React.PointerEvent) => {
@@ -300,9 +322,8 @@ export function FloatingPanel({ isOpen, onClose }: FloatingPanelProps) {
       window.addEventListener("pointermove", onMove);
       window.addEventListener("pointerup", onUp, { once: true });
     },
-    [rect]
+    [rect],
   );
-
 
   if (!isOpen) return null;
 
@@ -330,157 +351,163 @@ export function FloatingPanel({ isOpen, onClose }: FloatingPanelProps) {
           backgroundColor: "#121212",
         }}
       >
-      {/* ---- header: identity chip, pill tabs, window controls.
+        {/* ---- header: identity chip, pill tabs, window controls.
                One row (the whole empty area is the drag region) so the
                canvas keeps as much vertical space as possible. ---- */}
-      <div
-        className="flex h-10 shrink-0 cursor-grab select-none items-center gap-1 border-b border-white/[0.06] bg-[#171512] pl-2.5 pr-1.5 active:cursor-grabbing"
-        onPointerDown={onDragStart}
-      >
         <div
-          className="mr-1 flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-[6px]"
-          style={{
-            backgroundColor:
-              "color-mix(in srgb, var(--reader-accent) 18%, transparent)",
-          }}
-          title="Drawings"
+          className="flex h-10 shrink-0 cursor-grab select-none items-center gap-1 border-b border-white/[0.06] bg-[#171512] pl-2.5 pr-1.5 active:cursor-grabbing"
+          onPointerDown={onDragStart}
         >
-          <Pen
-            size={12}
-            strokeWidth={2}
-            style={{ color: "var(--reader-accent)" }}
-          />
-        </div>
+          <div
+            className="mr-1 flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-[6px]"
+            style={{
+              backgroundColor:
+                "color-mix(in srgb, var(--reader-accent) 18%, transparent)",
+            }}
+            title="Drawings"
+          >
+            <Pen
+              size={12}
+              strokeWidth={2}
+              style={{ color: "var(--reader-accent)" }}
+            />
+          </div>
 
-        {/* pill tabs (scrollable); empty strip space stays draggable */}
-        <div
-          role="tablist"
-          className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto no-scrollbar"
-        >
-          {tabs.map((tab) => {
-            const isActive = tab.id === activeTabId;
-            const isEditing = tab.id === editingTabId;
+          {/* pill tabs (scrollable); empty strip space stays draggable */}
+          <div
+            role="tablist"
+            className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto no-scrollbar"
+          >
+            {tabs.map((tab) => {
+              const isActive = tab.id === activeTabId;
+              const isEditing = tab.id === editingTabId;
 
-            return (
-              <div
-                key={tab.id}
-                role="tab"
-                aria-selected={isActive}
-                title={isEditing ? undefined : tab.label}
-                onPointerDown={(e) => e.stopPropagation()}
-                onClick={() => setActiveTabId(tab.id)}
-                onDoubleClick={() => handleRenameStart(tab)}
-                onContextMenu={(e) => {
-                  e.preventDefault();
-                  setCtxMenu({ tabId: tab.id, x: e.clientX, y: e.clientY });
-                }}
-                className={`group flex h-7 shrink-0 cursor-pointer items-center gap-1.5 rounded-[7px] pl-2.5 text-[12px] transition-colors ${
-                  isActive
-                    ? "bg-white/[0.08] pr-1.5 font-medium text-stone-100"
-                    : "pr-2.5 text-stone-500 hover:bg-white/[0.04] hover:text-stone-300"
-                }`}
-              >
-                {isEditing ? (
-                  <input
-                    ref={editInputRef}
-                    value={editingLabel}
-                    onChange={(e) => setEditingLabel(e.target.value)}
-                    onBlur={handleRenameCommit}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") handleRenameCommit();
-                      if (e.key === "Escape") setEditingTabId(null);
-                    }}
-                    onClick={(e) => e.stopPropagation()}
-                    onDoubleClick={(e) => e.stopPropagation()}
-                    onPointerDown={(e) => e.stopPropagation()}
-                    className="h-[20px] w-[88px] rounded-[4px] bg-black/40 px-1.5 text-[12px] text-stone-100 outline-none"
-                    style={{ boxShadow: "0 0 0 1px var(--reader-accent)" }}
-                  />
-                ) : (
-                  <>
-                    <span className="max-w-[110px] truncate">{tab.label}</span>
-                    {isActive &&
-                      (tabs.length > 1 ? (
-                        /* Accent dot that morphs into a close button on hover */
-                        <span className="relative flex h-[16px] w-[16px] items-center justify-center">
+              return (
+                <div
+                  key={tab.id}
+                  role="tab"
+                  aria-selected={isActive}
+                  title={isEditing ? undefined : tab.label}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={() => setActiveTabId(tab.id)}
+                  onDoubleClick={() => handleRenameStart(tab)}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    setCtxMenu({ tabId: tab.id, x: e.clientX, y: e.clientY });
+                  }}
+                  className={`group flex h-7 shrink-0 cursor-pointer items-center gap-1.5 rounded-[7px] pl-2.5 text-[12px] transition-colors ${
+                    isActive
+                      ? "bg-white/[0.08] pr-1.5 font-medium text-stone-100"
+                      : "pr-2.5 text-stone-500 hover:bg-white/[0.04] hover:text-stone-300"
+                  }`}
+                >
+                  {isEditing ? (
+                    <input
+                      ref={editInputRef}
+                      value={editingLabel}
+                      onChange={(e) => setEditingLabel(e.target.value)}
+                      onBlur={handleRenameCommit}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") handleRenameCommit();
+                        if (e.key === "Escape") setEditingTabId(null);
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                      onDoubleClick={(e) => e.stopPropagation()}
+                      onPointerDown={(e) => e.stopPropagation()}
+                      className="h-[20px] w-[88px] rounded-[4px] bg-black/40 px-1.5 text-[12px] text-stone-100 outline-none"
+                      style={{ boxShadow: "0 0 0 1px var(--reader-accent)" }}
+                    />
+                  ) : (
+                    <>
+                      <span className="max-w-[110px] truncate">
+                        {tab.label}
+                      </span>
+                      {isActive &&
+                        (tabs.length > 1 ? (
+                          /* Accent dot that morphs into a close button on hover */
+                          <span className="relative flex h-[16px] w-[16px] items-center justify-center">
+                            <span
+                              className="h-[5px] w-[5px] rounded-full transition-opacity group-hover:opacity-0"
+                              style={{
+                                backgroundColor: "var(--reader-accent)",
+                              }}
+                            />
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void handleDeleteTab(tab.id);
+                              }}
+                              onPointerDown={(e) => e.stopPropagation()}
+                              className="absolute inset-0 flex items-center justify-center rounded-[4px] opacity-0 transition-opacity hover:bg-white/10 group-hover:opacity-100"
+                              aria-label={`Delete ${tab.label}`}
+                              title="Delete canvas"
+                            >
+                              <X size={11} strokeWidth={2.25} />
+                            </button>
+                          </span>
+                        ) : (
                           <span
-                            className="h-[5px] w-[5px] rounded-full transition-opacity group-hover:opacity-0"
+                            className="mx-[5px] h-[5px] w-[5px] rounded-full"
                             style={{ backgroundColor: "var(--reader-accent)" }}
                           />
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              void handleDeleteTab(tab.id);
-                            }}
-                            onPointerDown={(e) => e.stopPropagation()}
-                            className="absolute inset-0 flex items-center justify-center rounded-[4px] opacity-0 transition-opacity hover:bg-white/10 group-hover:opacity-100"
-                            aria-label={`Delete ${tab.label}`}
-                            title="Delete canvas"
-                          >
-                            <X size={11} strokeWidth={2.25} />
-                          </button>
-                        </span>
-                      ) : (
-                        <span
-                          className="mx-[5px] h-[5px] w-[5px] rounded-full"
-                          style={{ backgroundColor: "var(--reader-accent)" }}
-                        />
-                      ))}
-                  </>
-                )}
-              </div>
-            );
-          })}
+                        ))}
+                    </>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          <button
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={handleCreateTab}
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] text-stone-500 transition-colors hover:bg-white/[0.06] hover:text-stone-200"
+            aria-label="New canvas"
+            title="New canvas"
+          >
+            <Plus size={14} strokeWidth={2} />
+          </button>
+
+          <div className="mx-1 h-4 w-px shrink-0 bg-white/[0.08]" />
+
+          <button
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={() => setMinimized(true)}
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] text-stone-500 transition-colors hover:bg-white/[0.06] hover:text-stone-200"
+            aria-label="Minimize drawing panel"
+            title="Minimize"
+          >
+            <Minus size={14} strokeWidth={2} />
+          </button>
+          <button
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={() => onClose()}
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] text-stone-500 transition-colors hover:bg-red-500/15 hover:text-red-400"
+            aria-label="Close drawing panel"
+            title="Close"
+          >
+            <X size={14} strokeWidth={2} />
+          </button>
         </div>
 
-        <button
-          onPointerDown={(e) => e.stopPropagation()}
-          onClick={handleCreateTab}
-          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] text-stone-500 transition-colors hover:bg-white/[0.06] hover:text-stone-200"
-          aria-label="New canvas"
-          title="New canvas"
-        >
-          <Plus size={14} strokeWidth={2} />
-        </button>
+        {/* ---- canvas area ---- */}
+        {activeTabId && (
+          <DrawingSurface
+            key={`${activeTabId}:${canvasNonce}`}
+            tabId={activeTabId}
+          />
+        )}
 
-        <div className="mx-1 h-4 w-px shrink-0 bg-white/[0.08]" />
-
-        <button
-          onPointerDown={(e) => e.stopPropagation()}
-          onClick={() => setMinimized(true)}
-          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] text-stone-500 transition-colors hover:bg-white/[0.06] hover:text-stone-200"
-          aria-label="Minimize drawing panel"
-          title="Minimize"
-        >
-          <Minus size={14} strokeWidth={2} />
-        </button>
-        <button
-          onPointerDown={(e) => e.stopPropagation()}
-          onClick={() => onClose()}
-          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] text-stone-500 transition-colors hover:bg-red-500/15 hover:text-red-400"
-          aria-label="Close drawing panel"
-          title="Close"
-        >
-          <X size={14} strokeWidth={2} />
-        </button>
-      </div>
-
-      {/* ---- canvas area ---- */}
-      {activeTabId && (
-        <DrawingSurface
-          key={`${activeTabId}:${canvasNonce}`}
-          tabId={activeTabId}
-        />
-      )}
-
-      {/* ---- resize handles ---- */}
-      {(["n", "s", "e", "w", "ne", "nw", "se", "sw"] as ResizeDir[]).map((dir) => (
-        <ResizeHandle
-          key={dir}
-          dir={dir}
-          onPointerDown={(e) => onResizeStart(dir, e)}
-        />
-      ))}
+        {/* ---- resize handles ---- */}
+        {(["n", "s", "e", "w", "ne", "nw", "se", "sw"] as ResizeDir[]).map(
+          (dir) => (
+            <ResizeHandle
+              key={dir}
+              dir={dir}
+              onPointerDown={(e) => onResizeStart(dir, e)}
+            />
+          ),
+        )}
       </div>
 
       {/* ---- tab context menu (outside panel so position: fixed uses viewport) ---- */}

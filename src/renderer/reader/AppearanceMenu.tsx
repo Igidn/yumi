@@ -116,7 +116,10 @@ export function AppearanceMenu({
                   active ? "bg-reader-edge/70" : "hover:bg-reader-edge/40"
                 }`}
               >
-                <LinesIcon tight={preset === LINE_HEIGHT_PRESETS[0]} loose={preset === LINE_HEIGHT_PRESETS[2]} />
+                <LinesIcon
+                  tight={preset === LINE_HEIGHT_PRESETS[0]}
+                  loose={preset === LINE_HEIGHT_PRESETS[2]}
+                />
               </button>
             );
           })}

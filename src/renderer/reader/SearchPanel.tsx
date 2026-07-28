@@ -108,7 +108,7 @@ export function SearchPanel({
 
   const hits = useMemo(
     () => searchChapters(chapters, debouncedQuery),
-    [chapters, debouncedQuery]
+    [chapters, debouncedQuery],
   );
 
   return (

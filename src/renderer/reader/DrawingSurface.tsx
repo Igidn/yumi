@@ -63,7 +63,7 @@ const DEFAULT_SCENE_APP_STATE: Record<string, unknown> = {
  * plain object) that crash Excalidraw when fed back as-is.
  */
 function sanitizeLoadedAppState(
-  raw: Record<string, unknown> | undefined
+  raw: Record<string, unknown> | undefined,
 ): Record<string, unknown> {
   const out = { ...DEFAULT_SCENE_APP_STATE };
   if (!raw) return out;
@@ -90,7 +90,7 @@ interface Debounced<A extends unknown[]> {
 
 function debounce<A extends unknown[]>(
   fn: (...args: A) => void,
-  ms: number
+  ms: number,
 ): Debounced<A> {
   let timer: number | null = null;
   let pending: A | null = null;
@@ -140,7 +140,7 @@ export function DrawingSurface({ tabId }: { tabId: string }) {
 
   const saveScene = async (
     elements: readonly OrderedExcalidrawElement[],
-    appState: AppState
+    appState: AppState,
   ) => {
     const blob: SceneBlob = {
       elements,
@@ -168,7 +168,7 @@ export function DrawingSurface({ tabId }: { tabId: string }) {
       (elements: readonly OrderedExcalidrawElement[], appState: AppState) => {
         void saveRef.current(elements, appState).catch(console.error);
       },
-      SAVE_DEBOUNCE_MS
+      SAVE_DEBOUNCE_MS,
     );
     debouncedSaveRef.current = debounced;
     return () => debounced.flush();
@@ -191,7 +191,7 @@ export function DrawingSurface({ tabId }: { tabId: string }) {
           appState: sanitizeLoadedAppState(blob?.appState),
         },
         null,
-        null
+        null,
       );
 
       // Seed the guard before applying, so the onChange triggered by our own

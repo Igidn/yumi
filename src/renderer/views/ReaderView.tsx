@@ -41,7 +41,7 @@ export function ReaderView({ bookId }: { bookId: number }) {
   const [payload, setPayload] = useState<ReaderPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [settings, setSettings] = useState<ReaderSettings>(
-    DEFAULT_READER_SETTINGS
+    DEFAULT_READER_SETTINGS,
   );
   const [chapterPos, setChapterPos] = useState(0);
   /** Fraction to land at when the chapter changes (0 start, 1 end, resume). */
@@ -87,7 +87,7 @@ export function ReaderView({ bookId }: { bookId: number }) {
         document.title = data.book.title || "Yumi";
         const pos = Math.min(
           data.resumeChapterPos,
-          Math.max(0, data.chapters.length - 1)
+          Math.max(0, data.chapters.length - 1),
         );
         setChapterPos(pos);
         setLandingFraction(data.chapters[pos]?.scrollPosition ?? 0);
@@ -106,8 +106,7 @@ export function ReaderView({ bookId }: { bookId: number }) {
     const data = payloadRef.current;
     const p = progressRef.current;
     if (!data || p.chapterId === 0 || data.chapters.length === 0) return;
-    const bookProgress =
-      (p.chapterPos + p.fraction) / data.chapters.length;
+    const bookProgress = (p.chapterPos + p.fraction) / data.chapters.length;
     void window.yumi.invoke("reader:progress", {
       bookId: data.book.id,
       chapterId: p.chapterId,
@@ -154,7 +153,7 @@ export function ReaderView({ bookId }: { bookId: number }) {
       setLandingFraction(fraction);
       setChapterPos(pos);
     },
-    [flushProgress]
+    [flushProgress],
   );
 
   const handleOverflow = useCallback(
@@ -163,7 +162,7 @@ export function ReaderView({ bookId }: { bookId: number }) {
       // overflows land on the previous chapter's last page (Apple Books).
       goToChapter(chapterPos + dir, dir === 1 ? 0 : 1);
     },
-    [chapterPos, goToChapter]
+    [chapterPos, goToChapter],
   );
 
   // Fragment target + nonce for scrolling after chapter mount (nonce forces re-fire).
@@ -186,7 +185,7 @@ export function ReaderView({ bookId }: { bookId: number }) {
       goToChapter(targetChapter, 0);
       setFragmentTarget((prev) => ({ fragment, nonce: prev.nonce + 1 }));
     },
-    [chapterPos, pageInfo?.fraction, goToChapter]
+    [chapterPos, pageInfo?.fraction, goToChapter],
   );
 
   // Back button: pop last history entry and return to it.
@@ -197,7 +196,9 @@ export function ReaderView({ bookId }: { bookId: number }) {
       const next = prev.slice(0, -1);
       if (next.length > 0) {
         const prevEntry = next[next.length - 1];
-        setBackButton({ side: prevEntry.chapterPos < entry.chapterPos ? "right" : "left" });
+        setBackButton({
+          side: prevEntry.chapterPos < entry.chapterPos ? "right" : "left",
+        });
       } else {
         setBackButton(null);
       }
@@ -224,7 +225,7 @@ export function ReaderView({ bookId }: { bookId: number }) {
         goToChapter(pos, 0);
       }
     },
-    [chapterPos, goToChapter]
+    [chapterPos, goToChapter],
   );
 
   const handleSearchJump = useCallback(
@@ -236,7 +237,7 @@ export function ReaderView({ bookId }: { bookId: number }) {
       setJump({ blockIndex, nonce: nonceRef.current++ });
       if (pos !== chapterPos) goToChapter(pos, 0, true);
     },
-    [chapterPos, goToChapter]
+    [chapterPos, goToChapter],
   );
 
   const handleSpreadChange = useCallback(
@@ -251,7 +252,7 @@ export function ReaderView({ bookId }: { bookId: number }) {
       };
       scheduleProgressSave();
     },
-    [chapterPos, scheduleProgressSave]
+    [chapterPos, scheduleProgressSave],
   );
 
   // Chapter-level shortcuts; page-turn keys live in PagedChapter.
@@ -292,10 +293,10 @@ export function ReaderView({ bookId }: { bookId: number }) {
     if (!isMac) return;
     window.yumi.isFullScreen().then(setIsFullScreen);
     const unlistenEnter = window.yumi.on("window:enterFullScreen", () =>
-      setIsFullScreen(true)
+      setIsFullScreen(true),
     );
     const unlistenLeave = window.yumi.on("window:leaveFullScreen", () =>
-      setIsFullScreen(false)
+      setIsFullScreen(false),
     );
     return () => {
       unlistenEnter();
@@ -330,7 +331,7 @@ export function ReaderView({ bookId }: { bookId: number }) {
         hideHeader();
       }
     },
-    [showHeader, hideHeader]
+    [showHeader, hideHeader],
   );
 
   // Book-wide page offsets: remeasure every chapter when layout/typography changes.
@@ -344,14 +345,9 @@ export function ReaderView({ bookId }: { bookId: number }) {
       colGap: pageInfo.colGap,
     };
     return payload.chapters.map((ch) =>
-      countChapterCols(ch, layout, settings.fontSize, settings.lineHeight)
+      countChapterCols(ch, layout, settings.fontSize, settings.lineHeight),
     );
-  }, [
-    payload,
-    pageInfo,
-    settings.fontSize,
-    settings.lineHeight,
-  ]);
+  }, [payload, pageInfo, settings.fontSize, settings.lineHeight]);
 
   // ---- render ------------------------------------------------------------
 
@@ -385,7 +381,7 @@ export function ReaderView({ bookId }: { bookId: number }) {
     if (!pageInfo) return null;
     const local = Math.min(
       (pageInfo.spread + 1) * pageInfo.perSpread,
-      pageInfo.totalCols
+      pageInfo.totalCols,
     );
     if (!colsByChapter) return chapterPos === 0 ? local : null;
     let prefix = 0;
@@ -481,19 +477,19 @@ export function ReaderView({ bookId }: { bookId: number }) {
       {/* Reading surface */}
       {chapter ? (
         <div className="relative flex min-h-0 flex-1 flex-col">
-        <PagedChapter
-          key={chapter.id}
-          chapter={chapter}
-          fontSize={settings.fontSize}
-          lineHeight={settings.lineHeight}
-          initialFraction={landingFraction}
-          jump={jump}
-          reposition={reposition}
-          fragmentTarget={fragmentTarget}
-          onSpreadChange={handleSpreadChange}
-          onOverflow={handleOverflow}
-          onLinkNavigate={handleLinkNavigate}
-        />
+          <PagedChapter
+            key={chapter.id}
+            chapter={chapter}
+            fontSize={settings.fontSize}
+            lineHeight={settings.lineHeight}
+            initialFraction={landingFraction}
+            jump={jump}
+            reposition={reposition}
+            fragmentTarget={fragmentTarget}
+            onSpreadChange={handleSpreadChange}
+            onOverflow={handleOverflow}
+            onLinkNavigate={handleLinkNavigate}
+          />
         </div>
       ) : (
         <div className="flex flex-1 items-center justify-center px-8">

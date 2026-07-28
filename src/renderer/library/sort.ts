@@ -1,19 +1,23 @@
 import type { Book } from "../../shared/types";
 
-export type SortField = "title" | "author" | "recent" | "progress" | "importedAt";
+export type SortField =
+  "title" | "author" | "recent" | "progress" | "importedAt";
 export type SortDir = "asc" | "desc";
 export type SortKey = { field: SortField; dir: SortDir };
 
 // Date-based fields read better newest-first; string-based read better
 // A→Z. Clicking the same field again flips the direction.
-export const SORT_OPTIONS: { field: SortField; label: string; defaultDir: SortDir }[] =
-  [
-    { field: "title", label: "Title", defaultDir: "asc" },
-    { field: "author", label: "Author", defaultDir: "asc" },
-    { field: "recent", label: "Recent", defaultDir: "desc" },
-    { field: "progress", label: "Read Progress", defaultDir: "desc" },
-    { field: "importedAt", label: "Date added", defaultDir: "desc" },
-  ];
+export const SORT_OPTIONS: {
+  field: SortField;
+  label: string;
+  defaultDir: SortDir;
+}[] = [
+  { field: "title", label: "Title", defaultDir: "asc" },
+  { field: "author", label: "Author", defaultDir: "asc" },
+  { field: "recent", label: "Recent", defaultDir: "desc" },
+  { field: "progress", label: "Read Progress", defaultDir: "desc" },
+  { field: "importedAt", label: "Date added", defaultDir: "desc" },
+];
 
 // Sort comparator. Date-based fields push missing values to the end regardless
 // of direction so "never opened" never crowds the top of Recent.
@@ -45,7 +49,10 @@ export function compareBooks(a: Book, b: Book, key: SortKey): number {
       return byTitle;
     }
     case "importedAt": {
-      return sign * (a.importedAt < b.importedAt ? -1 : a.importedAt > b.importedAt ? 1 : 0);
+      return (
+        sign *
+        (a.importedAt < b.importedAt ? -1 : a.importedAt > b.importedAt ? 1 : 0)
+      );
     }
   }
 }
@@ -62,9 +69,20 @@ const isMain =
   import.meta.url === `file://${process.argv[1]}`;
 if (isMain) {
   const mk = (over: Partial<Book>): Book => ({
-    id: 0, title: "", author: "", format: "epub", sourcePath: "", sha256: null,
-    coverPath: null, importedAt: "2024-01-01T00:00:00Z", lastOpenedAt: null,
-    progress: 0, priorProgress: null, collection: "", trashed: 0, ...over,
+    id: 0,
+    title: "",
+    author: "",
+    format: "epub",
+    sourcePath: "",
+    sha256: null,
+    coverPath: null,
+    importedAt: "2024-01-01T00:00:00Z",
+    lastOpenedAt: null,
+    progress: 0,
+    priorProgress: null,
+    collection: "",
+    trashed: 0,
+    ...over,
   });
   const books = [
     mk({ id: 1, title: "B", author: "Adams" }),
@@ -81,32 +99,48 @@ if (isMain) {
     mk({ id: 1, title: "B", progress: 0.5 }),
     mk({ id: 2, title: "A", progress: 0.5 }),
   ];
-  const r = tied.sort((a, b) => compareBooks(a, b, { field: "progress", dir: "asc" }));
-  if (r[0].title !== "A") throw new Error("progress tie should fall back to title");
+  const r = tied.sort((a, b) =>
+    compareBooks(a, b, { field: "progress", dir: "asc" }),
+  );
+  if (r[0].title !== "A")
+    throw new Error("progress tie should fall back to title");
   // Recent with no timestamps falls back to title.
   const fresh = [
     mk({ id: 1, title: "Z", lastOpenedAt: null }),
     mk({ id: 2, title: "A", lastOpenedAt: null }),
   ];
-  const r2 = fresh.sort((a, b) => compareBooks(a, b, { field: "recent", dir: "asc" }));
-  if (r2[0].title !== "A") throw new Error("null recent should fall back to title");
+  const r2 = fresh.sort((a, b) =>
+    compareBooks(a, b, { field: "recent", dir: "asc" }),
+  );
+  if (r2[0].title !== "A")
+    throw new Error("null recent should fall back to title");
   // Recent with real timestamps: older first for asc, newer first for desc.
   const opened = [
     mk({ id: 1, title: "A", lastOpenedAt: "2024-01-01T00:00:00Z" }),
     mk({ id: 2, title: "B", lastOpenedAt: "2024-06-01T00:00:00Z" }),
   ];
-  const asc = [...opened].sort((a, b) => compareBooks(a, b, { field: "recent", dir: "asc" }));
+  const asc = [...opened].sort((a, b) =>
+    compareBooks(a, b, { field: "recent", dir: "asc" }),
+  );
   if (asc[0].id !== 1) throw new Error("recent asc should put older first");
-  const desc = [...opened].sort((a, b) => compareBooks(a, b, { field: "recent", dir: "desc" }));
+  const desc = [...opened].sort((a, b) =>
+    compareBooks(a, b, { field: "recent", dir: "desc" }),
+  );
   if (desc[0].id !== 2) throw new Error("recent desc should put newer first");
   // importedAt: same direction check.
   const added = [
     mk({ id: 1, title: "A", importedAt: "2024-01-01T00:00:00Z" }),
     mk({ id: 2, title: "B", importedAt: "2024-06-01T00:00:00Z" }),
   ];
-  const addedAsc = [...added].sort((a, b) => compareBooks(a, b, { field: "importedAt", dir: "asc" }));
-  if (addedAsc[0].id !== 1) throw new Error("importedAt asc should put older first");
-  const addedDesc = [...added].sort((a, b) => compareBooks(a, b, { field: "importedAt", dir: "desc" }));
-  if (addedDesc[0].id !== 2) throw new Error("importedAt desc should put newer first");
+  const addedAsc = [...added].sort((a, b) =>
+    compareBooks(a, b, { field: "importedAt", dir: "asc" }),
+  );
+  if (addedAsc[0].id !== 1)
+    throw new Error("importedAt asc should put older first");
+  const addedDesc = [...added].sort((a, b) =>
+    compareBooks(a, b, { field: "importedAt", dir: "desc" }),
+  );
+  if (addedDesc[0].id !== 2)
+    throw new Error("importedAt desc should put newer first");
   console.log("sort.ts: ok");
 }

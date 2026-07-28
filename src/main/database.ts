@@ -1,5 +1,5 @@
 import Database from "better-sqlite3";
-import { BetterSQLite3Database,drizzle } from "drizzle-orm/better-sqlite3";
+import { BetterSQLite3Database, drizzle } from "drizzle-orm/better-sqlite3";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import path from "path";
 
@@ -36,7 +36,7 @@ export function hasFts5(): boolean {
   try {
     const sqlite = new Database(":memory:");
     sqlite.exec(
-      "CREATE VIRTUAL TABLE __fts5_probe__ USING fts5 (probe); DROP TABLE __fts5_probe__;"
+      "CREATE VIRTUAL TABLE __fts5_probe__ USING fts5 (probe); DROP TABLE __fts5_probe__;",
     );
     sqlite.close();
     return true;

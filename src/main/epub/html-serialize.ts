@@ -18,7 +18,7 @@ export function escapeHtmlText(s: string): string {
 
 export function inlineHtml(
   node: Node,
-  linkResolver?: (href: string) => LinkTarget | null
+  linkResolver?: (href: string) => LinkTarget | null,
 ): string {
   let out = "";
   for (let i = 0; i < node.childNodes.length; i++) {
@@ -63,7 +63,9 @@ export function inlineHtml(
       if (href && inner.trim() && linkResolver) {
         const target = linkResolver(href);
         if (target) {
-          const frag = target.fragment ? ` data-fragment="${escapeHtmlText(target.fragment)}"` : "";
+          const frag = target.fragment
+            ? ` data-fragment="${escapeHtmlText(target.fragment)}"`
+            : "";
           const a = `<a${idAttr} data-chapter="${target.chapterIndex}"${frag} href="${escapeHtmlText(href)}">${inner}</a>`;
           out += isNoteref ? `<sup class="noteref">${a}</sup>` : a;
           continue;
@@ -96,7 +98,7 @@ export function makeBlock(
   node: Element,
   level?: number,
   linkResolver?: (href: string) => LinkTarget | null,
-  fragment?: string
+  fragment?: string,
 ): ContentBlock | null {
   const text = textOf(node);
   if (!text) return null;

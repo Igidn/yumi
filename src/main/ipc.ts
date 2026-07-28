@@ -12,11 +12,7 @@ import type {
 import { getDb, hasFts5 } from "./database";
 import { appSettings, books } from "./db/schema";
 import { registerDrawingIpcHandlers } from "./drawings-ipc";
-import {
-  bookForRenderer,
-  deleteBook,
-  importBook,
-} from "./import";
+import { bookForRenderer, deleteBook, importBook } from "./import";
 import { getCoversDir } from "./paths";
 import { loadReaderBook, saveReaderProgress } from "./reader";
 import { getStore } from "./store";
@@ -24,19 +20,16 @@ import { closeReaderWindow, openReaderWindow } from "./windows";
 
 type Handler<C extends IPCChannel> = (
   event: Electron.IpcMainInvokeEvent,
-  payload: IPCPayloads[C]
+  payload: IPCPayloads[C],
 ) => Promise<IPCResponses[C]> | IPCResponses[C];
 
-function handle<C extends IPCChannel>(
-  channel: C,
-  handler: Handler<C>
-): void {
+function handle<C extends IPCChannel>(channel: C, handler: Handler<C>): void {
   ipcMain.handle(
     channel,
     handler as (
       event: Electron.IpcMainInvokeEvent,
       ...args: unknown[]
-    ) => unknown
+    ) => unknown,
   );
 }
 
@@ -112,7 +105,8 @@ export function registerIpcHandlers(): void {
       priorProgress?: number | null;
       coverPath?: string;
     } = {};
-    if (payload.title !== undefined) patch.title = payload.title.trim() || "Untitled";
+    if (payload.title !== undefined)
+      patch.title = payload.title.trim() || "Untitled";
     if (payload.author !== undefined) patch.author = payload.author;
 
     if (payload.restoreProgress) {
@@ -136,7 +130,7 @@ export function registerIpcHandlers(): void {
       const ext = path.extname(src).toLowerCase().replace(".", "") || "jpg";
       const dest = path.join(
         getCoversDir(),
-        `${existing.sha256 ?? existing.id}.${ext}`
+        `${existing.sha256 ?? existing.id}.${ext}`,
       );
       await fs.promises.copyFile(src, dest);
       // Drop previous cover if it lived somewhere else under covers/.
@@ -214,7 +208,7 @@ export function registerIpcHandlers(): void {
   handle("import:book", async (_, payload) => {
     const outcome = await importBook(
       payload.sourcePath,
-      payload.duplicateHandling ?? "prompt"
+      payload.duplicateHandling ?? "prompt",
     );
     // Only notify when the library actually changed: a fresh import or a
     // replace (which deletes then inserts). A duplicate prompt or a skip
@@ -224,7 +218,8 @@ export function registerIpcHandlers(): void {
   });
 
   handle("dialog:openFile", async () => {
-    const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
+    const win =
+      BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
     const opts: Electron.OpenDialogOptions = {
       title: "Import a book",
       properties: ["openFile", "multiSelections"],
@@ -240,7 +235,8 @@ export function registerIpcHandlers(): void {
   });
 
   handle("dialog:openImage", async () => {
-    const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
+    const win =
+      BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
     const opts: Electron.OpenDialogOptions = {
       title: "Choose a cover image",
       properties: ["openFile"],

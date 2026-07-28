@@ -62,7 +62,7 @@ export function countChapterCols(
     "contentWidth" | "contentHeight" | "colWidth" | "colGap"
   >,
   fontSize: number,
-  lineHeight: number
+  lineHeight: number,
 ): number {
   const host = document.createElement("div");
   host.style.cssText =
@@ -129,7 +129,7 @@ export function countChapterCols(
   const stride = layout.colWidth + layout.colGap;
   const totalCols = Math.max(
     1,
-    Math.round((content.scrollWidth + layout.colGap) / stride)
+    Math.round((content.scrollWidth + layout.colGap) / stride),
   );
   host.remove();
   return totalCols;
@@ -234,7 +234,7 @@ export function PagedChapter({
     // Column count from host width (same formula as foliate/readest).
     const perSpread = Math.min(
       MAX_COLUMN_COUNT,
-      Math.max(1, Math.ceil(Math.floor(availW) / Math.floor(MAX_INLINE_SIZE)))
+      Math.max(1, Math.ceil(Math.floor(availW) / Math.floor(MAX_INLINE_SIZE))),
     );
     // Keep at least MARGIN_X on each side so text never kisses the window edge.
     const innerW = Math.max(0, availW - MARGIN_X * 2);
@@ -244,7 +244,10 @@ export function PagedChapter({
         ? Math.round((-GAP_PERCENT / (GAP_PERCENT - 1)) * innerW)
         : 0;
     const colWidth = Math.floor(
-      Math.min((innerW - colGap * (perSpread - 1)) / perSpread, MAX_INLINE_SIZE)
+      Math.min(
+        (innerW - colGap * (perSpread - 1)) / perSpread,
+        MAX_INLINE_SIZE,
+      ),
     );
     const contentWidth = colWidth * perSpread + colGap * (perSpread - 1);
     const contentHeight = availH - CONTENT_V_INSET * 2;
@@ -259,7 +262,7 @@ export function PagedChapter({
     const stride = colWidth + colGap;
     const totalCols = Math.max(
       1,
-      Math.round((content.scrollWidth + colGap) / stride)
+      Math.round((content.scrollWidth + colGap) / stride),
     );
     const spreads = Math.max(1, Math.ceil(totalCols / perSpread));
 
@@ -274,7 +277,7 @@ export function PagedChapter({
         spreads,
         totalCols,
         margin: Math.max(0, (availW - contentWidth) / 2),
-      })
+      }),
     );
   }, []);
 
@@ -332,7 +335,9 @@ export function PagedChapter({
     lastJumpNonce.current = jump.nonce;
     const content = contentRef.current;
     if (!content) return;
-    const el = content.querySelector<HTMLElement>(`[data-b="${jump.blockIndex}"]`);
+    const el = content.querySelector<HTMLElement>(
+      `[data-b="${jump.blockIndex}"]`,
+    );
     if (!el) return;
     const target = Math.floor(el.offsetLeft / (geom.stride * geom.perSpread));
     setSpread(Math.min(Math.max(0, target), geom.spreads - 1));
@@ -349,7 +354,7 @@ export function PagedChapter({
     const content = contentRef.current;
     if (!content) return;
     const el = content.querySelector<HTMLElement>(
-      `[id="${CSS.escape(fragmentTarget.fragment)}"]`
+      `[id="${CSS.escape(fragmentTarget.fragment)}"]`,
     );
     if (!el) return;
     // Use bounding rect relative to the content container — offsetLeft is
@@ -427,7 +432,10 @@ export function PagedChapter({
   const handleContentClick = useCallback(
     (e: React.MouseEvent) => {
       // e.target may be a text node — walk up to the nearest element first.
-      const el = e.target instanceof Element ? e.target : (e.target as Node).parentElement;
+      const el =
+        e.target instanceof Element
+          ? e.target
+          : (e.target as Node).parentElement;
       const anchor = el?.closest("a[data-chapter]");
       if (!anchor) return;
       e.preventDefault();
@@ -436,7 +444,7 @@ export function PagedChapter({
       const frag = anchor.getAttribute("data-fragment");
       onLinkNavigate?.(ch, frag);
     },
-    [onLinkNavigate]
+    [onLinkNavigate],
   );
 
   return (
@@ -498,16 +506,27 @@ export function PagedChapter({
                 const level = Math.min(6, Math.max(1, block.level ?? 1));
                 const Tag = `h${level}` as "h1";
                 return (
-                  <Tag key={i} id={block.fragment || undefined} data-b={i} className={headingClass(level, i === 0)}>
+                  <Tag
+                    key={i}
+                    id={block.fragment || undefined}
+                    data-b={i}
+                    className={headingClass(level, i === 0)}
+                  >
                     {body}
                   </Tag>
                 );
               }
               // Book convention: no indent on a paragraph right after a
               // heading; every paragraph after another paragraph is indented.
-              const indent = i > 0 && chapter.blocks[i - 1].type === "paragraph";
+              const indent =
+                i > 0 && chapter.blocks[i - 1].type === "paragraph";
               return (
-                <p key={i} id={block.fragment || undefined} data-b={i} className={indent ? "reader-indent" : undefined}>
+                <p
+                  key={i}
+                  id={block.fragment || undefined}
+                  data-b={i}
+                  className={indent ? "reader-indent" : undefined}
+                >
                   {body}
                 </p>
               );
@@ -521,7 +540,9 @@ export function PagedChapter({
         <div
           className="reader-lightbox"
           onClick={() => setLightboxSrc(null)}
-          onKeyDown={(e) => { if (e.key === "Escape") setLightboxSrc(null); }}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") setLightboxSrc(null);
+          }}
         >
           <img src={lightboxSrc} alt="" className="reader-lightbox-img" />
         </div>

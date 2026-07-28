@@ -1,10 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron";
 
-import type {
-  IPCChannel,
-  IPCPayloads,
-  IPCResponses,
-} from "../shared/types";
+import type { IPCChannel, IPCPayloads, IPCResponses } from "../shared/types";
 
 contextBridge.exposeInMainWorld("yumi", {
   platform: process.platform,

@@ -1,4 +1,4 @@
-import { BrowserWindow,ipcMain } from "electron";
+import { BrowserWindow, ipcMain } from "electron";
 
 import {
   clearTab,
@@ -18,7 +18,7 @@ import {
 function broadcastToOthers(
   channel: string,
   data: unknown,
-  sender?: Electron.WebContents
+  sender?: Electron.WebContents,
 ): void {
   for (const win of BrowserWindow.getAllWindows()) {
     if (win.isDestroyed()) continue;
@@ -36,7 +36,7 @@ export function registerDrawingIpcHandlers(): void {
     "drawing:load-scene",
     async (_, payload: { tabId: string }) => {
       return loadScene(payload.tabId);
-    }
+    },
   );
 
   ipcMain.handle(
@@ -46,27 +46,30 @@ export function registerDrawingIpcHandlers(): void {
       broadcastToOthers(
         "drawing:scene-updated",
         { tabId: payload.tabId, sceneData: payload.sceneData },
-        event.sender
+        event.sender,
       );
-    }
+    },
   );
 
-  ipcMain.handle("drawing:create-tab", async (_, payload: { label: string }) => {
-    return createTab(payload.label);
-  });
+  ipcMain.handle(
+    "drawing:create-tab",
+    async (_, payload: { label: string }) => {
+      return createTab(payload.label);
+    },
+  );
 
   ipcMain.handle(
     "drawing:rename-tab",
     async (_, payload: { tabId: string; label: string }) => {
       renameTab(payload.tabId, payload.label);
-    }
+    },
   );
 
   ipcMain.handle(
     "drawing:delete-tab",
     async (_, payload: { tabId: string }) => {
       deleteTab(payload.tabId);
-    }
+    },
   );
 
   ipcMain.handle(
@@ -76,8 +79,8 @@ export function registerDrawingIpcHandlers(): void {
       broadcastToOthers(
         "drawing:scene-updated",
         { tabId: payload.tabId, sceneData: null },
-        event.sender
+        event.sender,
       );
-    }
+    },
   );
 }

@@ -5,7 +5,7 @@ import { getCoversDir } from "../paths";
 import { extractBlocks, makeLinkResolver } from "./blocks";
 import { Epub } from "./epub-class";
 import { loadNav } from "./nav";
-import type { ContentBlock,EpubCover, EpubMeta, ParsedEpub } from "./types";
+import type { ContentBlock, EpubCover, EpubMeta, ParsedEpub } from "./types";
 import { MAX_EXTRACTED_IMAGES, MAX_IMAGE_SIZE_BYTES } from "./types";
 import {
   chapterTitle,
@@ -61,7 +61,7 @@ export async function readEpubMeta(filePath: string): Promise<EpubMeta> {
  */
 export async function parseEpub(
   filePath: string,
-  bookId?: number
+  bookId?: number,
 ): Promise<ParsedEpub> {
   const epub = await Epub.open(filePath);
   try {
@@ -127,8 +127,14 @@ export async function parseEpub(
 
         // Extract blocks
         const allBlocks = await extractBlocksForRange(
-          epub, spineItems, startItem.index, nextStartIndex,
-          imageDir, imageMap, spineToChapter, chapters.length
+          epub,
+          spineItems,
+          startItem.index,
+          nextStartIndex,
+          imageDir,
+          imageMap,
+          spineToChapter,
+          chapters.length,
         );
 
         if (allBlocks.length === 0) continue;
@@ -160,7 +166,11 @@ export async function parseEpub(
         const docFullPath = epub.resolve(item.href).replace(/^\/+/, "");
         await extractImages(epub, doc, docFullPath, imageDir, imageMap);
 
-        const resolveLink = makeLinkResolver(docFullPath, spineToChapter, chapters.length);
+        const resolveLink = makeLinkResolver(
+          docFullPath,
+          spineToChapter,
+          chapters.length,
+        );
         const blocks = extractBlocks(doc, imageMap, docFullPath, resolveLink);
         if (blocks.length === 0) continue;
 
@@ -206,7 +216,10 @@ async function extractImages(
         const ext = pathExt(resolved) || "jpg";
         const filename = `${imageMap.size}.${ext}`;
         const dest = path.join(imageDir, filename);
-        await fs.promises.writeFile(dest, Buffer.from(await blob.arrayBuffer()));
+        await fs.promises.writeFile(
+          dest,
+          Buffer.from(await blob.arrayBuffer()),
+        );
         // bookId is derivable from imageDir: covers/<bookId>/images
         const bookId = path.basename(path.dirname(imageDir));
         imageMap.set(resolved, `covers/${bookId}/images/${filename}`);
@@ -243,7 +256,11 @@ async function extractBlocksForRange(
 
     await extractImages(epub, doc, docFullPath, imageDir, imageMap);
 
-    const resolveLink = makeLinkResolver(docFullPath, spineToChapter, chapterIndex);
+    const resolveLink = makeLinkResolver(
+      docFullPath,
+      spineToChapter,
+      chapterIndex,
+    );
     const blocks = extractBlocks(doc, imageMap, docFullPath, resolveLink);
     allBlocks.push(...blocks);
   }
@@ -259,13 +276,18 @@ function attachImageDims(
   if (!imageDir) return;
   const imgDims = new Map<string, { width: number; height: number }>();
   for (const [, savedPath] of imageMap) {
-    const dims = getImageDimensions(path.join(imageDir, path.basename(savedPath)));
+    const dims = getImageDimensions(
+      path.join(imageDir, path.basename(savedPath)),
+    );
     if (dims) imgDims.set(savedPath, dims);
   }
   for (const b of blocks) {
     if (b.type === "image" && b.src) {
       const dims = imgDims.get(b.src);
-      if (dims) { b.imgWidth = dims.width; b.imgHeight = dims.height; }
+      if (dims) {
+        b.imgWidth = dims.width;
+        b.imgHeight = dims.height;
+      }
     }
   }
 }

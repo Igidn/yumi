@@ -2,16 +2,12 @@
   "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
   "appId": "com.yumi.app",
   "productName": "Yumi",
-  "directories": {
-    "output": "release"
-  },
-  "files": [
-    "dist/**/*",
-    "package.json"
-  ],
-  "mac": {
-    "target": "dmg",
-    "category": "public.app-category.books",
-    "icon": "assets/icon.icns"
-  }
+  "directories": { "output": "release" },
+  "files": ["dist/**/*", "package.json"],
+  "mac":
+    {
+      "target": "dmg",
+      "category": "public.app-category.books",
+      "icon": "assets/icon.icns",
+    },
 }
