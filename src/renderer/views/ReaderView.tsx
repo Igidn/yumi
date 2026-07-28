@@ -347,7 +347,16 @@ export function ReaderView({ bookId }: { bookId: number }) {
     return payload.chapters.map((ch) =>
       countChapterCols(ch, layout, settings.fontSize, settings.lineHeight),
     );
-  }, [payload, pageInfo, settings.fontSize, settings.lineHeight]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    payload,
+    pageInfo?.contentWidth,
+    pageInfo?.contentHeight,
+    pageInfo?.colWidth,
+    pageInfo?.colGap,
+    settings.fontSize,
+    settings.lineHeight,
+  ]);
 
   // ---- render ------------------------------------------------------------
 
