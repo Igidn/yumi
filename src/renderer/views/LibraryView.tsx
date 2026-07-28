@@ -272,7 +272,7 @@ export function LibraryView({
 
           <section className="mt-10">
             {shelf.length > 0 && <h2 className={sectionLabel}>All books</h2>}
-            <div className="mt-4 grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-x-6 gap-y-12">
+            <div className="mt-4 grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-x-6 gap-y-12">
               {visibleBooks.map((book) => (
                 <BookCard
                   key={book.id}
