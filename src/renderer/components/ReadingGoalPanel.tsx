@@ -210,7 +210,7 @@ function BooksReadModal({
  */
 export function ReadingGoalPanel({ wide = false }: { wide?: boolean }) {
   const [stats, setStats] = useState<ReadingStats | null>(null);
-  const [goalOpen, setGoalOpen] = useState(true); // TEMP: visual check
+  const [goalOpen, setGoalOpen] = useState(false);
   const [booksOpen, setBooksOpen] = useState(false);
   const goalTriggerRef = useRef<HTMLButtonElement | null>(null);
 
@@ -365,12 +365,12 @@ export function ReadingGoalPanel({ wide = false }: { wide?: boolean }) {
           )}
         </div>
         {stats.booksReadThisYear.length > 0 ? (
-          <div className="mt-3 flex gap-1.5">
-            {stats.booksReadThisYear.slice(0, 4).map((book) => (
+          <div className="mt-3 grid grid-cols-7 gap-1">
+            {stats.booksReadThisYear.slice(0, 14).map((book) => (
               <MiniCover
                 key={book.id}
                 book={book}
-                className="aspect-[2/3] w-[34px]"
+                className="aspect-[2/3] w-full"
               />
             ))}
           </div>
