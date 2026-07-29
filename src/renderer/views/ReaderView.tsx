@@ -66,6 +66,8 @@ export function ReaderView({ bookId }: { bookId: number }) {
   const [drawingOpen, setDrawingOpen] = useState(false);
   const [jump, setJump] = useState<PageJump | null>(null);
   const [reposition, setReposition] = useState<Reposition | null>(null);
+  /** Slide direction for chapter-switch animation: -1 prev, 1 next, 0 none. */
+  const [slideDir, setSlideDir] = useState<-1 | 0 | 1>(0);
   // Hyperlink history: stack of positions visited before clicking a link.
   const [linkHistory, setLinkHistory] = useState<HistoryEntry[]>([]);
   const [backButton, setBackButton] = useState<{
@@ -171,10 +173,11 @@ export function ReaderView({ bookId }: { bookId: number }) {
       if (!keepJump) setJump(null);
       setReposition(null);
       setPageInfo(null);
+      setSlideDir(pos > chapterPos ? 1 : pos < chapterPos ? -1 : 0);
       setLandingFraction(fraction);
       setChapterPos(pos);
     },
-    [flushProgress],
+    [chapterPos, flushProgress],
   );
 
   const handleOverflow = useCallback(
@@ -517,7 +520,12 @@ export function ReaderView({ bookId }: { bookId: number }) {
 
       {/* Reading surface */}
       {chapter ? (
-        <div className="relative flex min-h-0 flex-1 flex-col">
+        <div
+          className={`relative flex min-h-0 flex-1 flex-col chapter-switch ${
+            slideDir === 1 ? "slide-next" : slideDir === -1 ? "slide-prev" : ""
+          }`}
+          onAnimationEnd={() => setSlideDir(0)}
+        >
           <PagedChapter
             key={chapter.id}
             chapter={chapter}
