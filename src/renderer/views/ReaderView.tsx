@@ -487,7 +487,7 @@ export function ReaderView({ bookId }: { bookId: number }) {
               setPanel(null);
               setAppearanceOpen((v) => !v);
             }}
-            className={`rounded-[6px] px-1.5 py-1 text-[13px] font-medium leading-none transition-colors ${
+            className={`rounded-[6px] px-1.5 py-1 text-[13px] font-medium leading-none transition-colors select-none ${
               appearanceOpen
                 ? "text-reader"
                 : "text-reader-muted hover:text-reader"

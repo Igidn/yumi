@@ -112,7 +112,7 @@ export function LibraryView({
     "text-[11px] font-semibold uppercase tracking-[0.12em] text-muted";
 
   return (
-    <div className="container-app pb-20">
+    <div className="container-app pb-20 select-none">
       <div className="flex gap-2">
         <div className="relative flex-1">
           <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted">

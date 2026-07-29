@@ -119,7 +119,7 @@ export function BookDetail({
       onClick={onClose}
     >
       <div
-        className="relative w-[480px] rounded-[14px] border border-edge bg-shell p-6 shadow-shell"
+        className="relative w-[480px] rounded-[14px] border border-edge bg-shell p-6 shadow-shell select-text"
         onClick={(e) => e.stopPropagation()}
       >
         <button
