@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { ContentBlock, TtsBackend, TtsSelection, TtsVoice } from "../../shared/types";
+import { loadTtsConfig, saveTtsConfig } from "./ttsSettings";
 
 export function useTts(
   spreadBlocks: ContentBlock[],
   onPageRight: () => void,
 ) {
-  const [backend] = useState<TtsBackend>("web");
-  const [rate, setRate] = useState(1);
-  const [voice, setVoice] = useState<TtsVoice | null>(null);
+  const [backend, setBackendState] = useState<TtsBackend>("web");
+  const [rate, setRateState] = useState(1);
+  const [voice, setVoiceState] = useState<TtsVoice | null>(null);
   const [voices, setVoices] = useState<TtsVoice[]>([]);
   const [speaking, setSpeaking] = useState(false);
   const [paused, setPaused] = useState(false);
@@ -18,6 +19,7 @@ export function useTts(
   const continueRef = useRef(false);
   const rateRef = useRef(1);
   const voiceRef = useRef<TtsVoice | null>(null);
+  const backendRef = useRef<TtsBackend>("web");
   const onPageRightRef = useRef(onPageRight);
   onPageRightRef.current = onPageRight;
   const utteranceIdRef = useRef(0);
@@ -26,18 +28,53 @@ export function useTts(
 
   useEffect(() => { rateRef.current = rate; }, [rate]);
   useEffect(() => { voiceRef.current = voice; }, [voice]);
+  useEffect(() => { backendRef.current = backend; }, [backend]);
 
-  // Load available voices from Web Speech API.
+  // Persist helper: snapshot current config to app_settings.
+  const persistConfig = useCallback(() => {
+    saveTtsConfig({
+      backend: backendRef.current,
+      rate: rateRef.current,
+      voiceId: voiceRef.current?.id ?? null,
+    });
+  }, []);
+
+  // Load persisted TTS config on mount.
+  useEffect(() => {
+    let cancelled = false;
+    void loadTtsConfig().then((cfg) => {
+      if (cancelled) return;
+      setBackendState(cfg.backend);
+      backendRef.current = cfg.backend;
+      setRateState(cfg.rate);
+      rateRef.current = cfg.rate;
+      // voice restore is deferred until voices are populated below
+      (window as any).__ttsPendingVoiceId = cfg.voiceId;
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  // Load available voices from Web Speech API. Restore persisted voice once
+  // the voice list is populated (may be async on some platforms).
   useEffect(() => {
     const synth = window.speechSynthesis;
     const populate = () => {
-      setVoices(
-        synth.getVoices().map((v) => ({
-          name: v.name,
-          lang: v.lang,
-          id: v.voiceURI,
-        })),
-      );
+      const list = synth.getVoices().map((v) => ({
+        name: v.name,
+        lang: v.lang,
+        id: v.voiceURI,
+      }));
+      setVoices(list);
+      // Restore persisted voice if we have a pending ID.
+      const pendingId = (window as any).__ttsPendingVoiceId as string | null | undefined;
+      if (pendingId) {
+        const match = list.find((v) => v.id === pendingId);
+        if (match) {
+          setVoiceState(match);
+          voiceRef.current = match;
+        }
+        delete (window as any).__ttsPendingVoiceId;
+      }
     };
     populate();
     synth.onvoiceschanged = populate;
@@ -200,31 +237,35 @@ export function useTts(
 
   const setRateAndUpdate = useCallback(
     (r: number) => {
-      setRate(r);
+      setRateState(r);
       rateRef.current = r;
+      persistConfig();
       if (continueRef.current) {
         const blockIdx = highlightBlockRef.current ?? 0;
         speakBlocks(spreadBlocks, blockIdx, 0);
       }
     },
-    [spreadBlocks, speakBlocks],
+    [spreadBlocks, speakBlocks, persistConfig],
   );
 
   const setVoiceAndUpdate = useCallback(
     (v: TtsVoice) => {
-      setVoice(v);
+      setVoiceState(v);
       voiceRef.current = v;
+      persistConfig();
       if (continueRef.current) {
         const blockIdx = highlightBlockRef.current ?? 0;
         speakBlocks(spreadBlocks, blockIdx, 0);
       }
     },
-    [spreadBlocks, speakBlocks],
+    [spreadBlocks, speakBlocks, persistConfig],
   );
 
-  const setBackend = useCallback((_b: TtsBackend) => {
-    // Only "web" is implemented for now.
-  }, []);
+  const setBackend = useCallback((b: TtsBackend) => {
+    setBackendState(b);
+    backendRef.current = b;
+    persistConfig();
+  }, [persistConfig]);
 
   return {
     start,
