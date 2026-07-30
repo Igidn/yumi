@@ -3,6 +3,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { ContentBlock, TtsBackend, TtsSelection, TtsVoice } from "../../shared/types";
 import { loadTtsConfig, saveTtsConfig } from "./ttsSettings";
 
+// Module-level var to pass persisted voice ID between effects (avoids window pollution).
+let pendingVoiceId: string | null = null;
+
 export function useTts(
   spreadBlocks: ContentBlock[],
   onPageRight: () => void,
@@ -21,7 +24,9 @@ export function useTts(
   const voiceRef = useRef<TtsVoice | null>(null);
   const backendRef = useRef<TtsBackend>("web");
   const onPageRightRef = useRef(onPageRight);
-  onPageRightRef.current = onPageRight;
+  useEffect(() => {
+    onPageRightRef.current = onPageRight;
+  }, [onPageRight]);
   const utteranceIdRef = useRef(0);
   // Track the last highlight block so voice/rate changes can restart from it.
   const highlightBlockRef = useRef<number | null>(null);
@@ -49,7 +54,7 @@ export function useTts(
       setRateState(cfg.rate);
       rateRef.current = cfg.rate;
       // voice restore is deferred until voices are populated below
-      (window as any).__ttsPendingVoiceId = cfg.voiceId;
+      pendingVoiceId = cfg.voiceId;
     });
     return () => { cancelled = true; };
   }, []);
@@ -66,14 +71,13 @@ export function useTts(
       }));
       setVoices(list);
       // Restore persisted voice if we have a pending ID.
-      const pendingId = (window as any).__ttsPendingVoiceId as string | null | undefined;
-      if (pendingId) {
-        const match = list.find((v) => v.id === pendingId);
+      if (pendingVoiceId) {
+        const match = list.find((v) => v.id === pendingVoiceId);
         if (match) {
           setVoiceState(match);
           voiceRef.current = match;
         }
-        delete (window as any).__ttsPendingVoiceId;
+        pendingVoiceId = null;
       }
     };
     populate();
