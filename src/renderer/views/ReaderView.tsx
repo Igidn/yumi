@@ -92,6 +92,10 @@ export function ReaderView({ bookId }: { bookId: number }) {
   const isMac = window.yumi.platform === "darwin";
 
   const nonceRef = useRef(1);
+  const readerChapterPosRef = useRef(chapterPos);
+  useEffect(() => {
+    readerChapterPosRef.current = chapterPos;
+  }, [chapterPos]);
   const payloadRef = useRef<ReaderPayload | null>(null);
   // Latest position for progress writes; chapterId 0 = nothing to save yet.
   const progressRef = useRef({ chapterPos: 0, chapterId: 0, fraction: 0 });
@@ -214,17 +218,14 @@ export function ReaderView({ bookId }: { bookId: number }) {
     [chapterPos, goToChapter],
   );
 
-  // TTS: speak through the current chapter, auto-advance on end.
-  const ttsChapterBlocks = payload?.chapters[chapterPos]?.blocks ?? [];
-  const tts = useTts(
-    ttsChapterBlocks,
-    useCallback(() => handleOverflow(1), [handleOverflow]),
-  );
+  // TTS: independent playback position, decoupled from reader chapter.
+  const tts = useTts(payload?.chapters ?? [], readerChapterPosRef);
 
-  // Auto-hide the TTS bar when playback ends naturally.
+  // Auto-hide the TTS bar when playback ends or user skims away.
   useEffect(() => {
     if (!tts.active) setTtsBarVisible(false);
-  }, [tts.active]);
+    if (tts.active && chapterPos !== tts.ttsChapterPos) setTtsBarVisible(false);
+  }, [tts.active, chapterPos, tts.ttsChapterPos]);
 
   // Fragment target + nonce for scrolling after chapter mount (nonce forces re-fire).
   const [fragmentTarget, setFragmentTarget] = useState<{
@@ -538,13 +539,30 @@ export function ReaderView({ bookId }: { bookId: number }) {
             AA
           </button>
           <button
-            onClick={() => setTtsBarVisible((v) => !v)}
+            onClick={() => {
+              if (tts.active && chapterPos !== tts.ttsChapterPos) {
+                setTtsBarVisible(true);
+                goToChapter(tts.ttsChapterPos, 0);
+                setJump({
+                  blockIndex: tts.highlightBlockIndex ?? 0,
+                  nonce: nonceRef.current++,
+                });
+              } else {
+                setTtsBarVisible((v) => !v);
+              }
+            }}
             className={`rounded-[6px] p-1.5 transition-colors ${
-              ttsBarVisible
+              ttsBarVisible || (tts.active && chapterPos !== tts.ttsChapterPos)
                 ? "text-reader"
                 : "text-reader-muted hover:text-reader"
             }`}
-            aria-label={ttsBarVisible ? "Hide read-aloud controls" : "Show read-aloud controls"}
+            aria-label={
+              tts.active && chapterPos !== tts.ttsChapterPos
+                ? "Jump to read-aloud position"
+                : ttsBarVisible
+                  ? "Hide read-aloud controls"
+                  : "Show read-aloud controls"
+            }
             aria-pressed={ttsBarVisible}
           >
             <Volume2 size={17} strokeWidth={1.75} />
@@ -584,7 +602,9 @@ export function ReaderView({ bookId }: { bookId: number }) {
             jump={jump}
             reposition={reposition}
             fragmentTarget={fragmentTarget}
-            highlightBlockIndex={tts.highlightBlockIndex}
+            highlightBlockIndex={
+            chapterPos === tts.ttsChapterPos ? tts.highlightBlockIndex : null
+          }
             onSpreadChange={handleSpreadChange}
             onOverflow={handleOverflow}
             onLinkNavigate={handleLinkNavigate}

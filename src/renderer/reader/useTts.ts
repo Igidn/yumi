@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import type {
   ContentBlock,
+  ReaderChapter,
   TtsBackend,
   TtsSelection,
   TtsVoice,
@@ -11,7 +12,10 @@ import { loadTtsConfig, saveTtsConfig } from "./ttsSettings";
 // Module-level var to pass persisted voice ID between effects (avoids window pollution).
 let pendingVoiceId: string | null = null;
 
-export function useTts(spreadBlocks: ContentBlock[], onPageRight: () => void) {
+export function useTts(
+  chapters: ReaderChapter[],
+  readerChapterPosRef: React.MutableRefObject<number>,
+) {
   const [backend, setBackendState] = useState<TtsBackend>("web");
   const [rate, setRateState] = useState(1);
   const [voice, setVoiceState] = useState<TtsVoice | null>(null);
@@ -22,18 +26,28 @@ export function useTts(spreadBlocks: ContentBlock[], onPageRight: () => void) {
     null,
   );
   const [active, setActive] = useState(false);
+  /** TTS-owned chapter position, independent of the reader view. */
+  const [ttsChapterPos, setTtsChapterPos] = useState(0);
 
   const continueRef = useRef(false);
   const rateRef = useRef(1);
   const voiceRef = useRef<TtsVoice | null>(null);
   const backendRef = useRef<TtsBackend>("web");
-  const onPageRightRef = useRef(onPageRight);
-  useEffect(() => {
-    onPageRightRef.current = onPageRight;
-  }, [onPageRight]);
   const utteranceIdRef = useRef(0);
   // Track the last highlight block so voice/rate changes can restart from it.
   const highlightBlockRef = useRef<number | null>(null);
+
+  // Stable refs for values accessed inside stable ([]-deps) callbacks.
+  const chaptersRef = useRef(chapters);
+  useEffect(() => {
+    chaptersRef.current = chapters;
+  }, [chapters]);
+  const ttsChapterPosRef = useRef(0);
+  useEffect(() => {
+    ttsChapterPosRef.current = ttsChapterPos;
+  }, [ttsChapterPos]);
+  /** When true, the next ttsChapterPos change is an auto-advance to speak. */
+  const advanceRef = useRef(false);
 
   useEffect(() => {
     rateRef.current = rate;
@@ -126,8 +140,13 @@ export function useTts(spreadBlocks: ContentBlock[], onPageRight: () => void) {
       }
 
       if (!text.trim()) {
-        if (continueRef.current) onPageRightRef.current();
-        else setActive(false);
+        // Empty chapter: auto-advance to the next one.
+        if (continueRef.current) {
+          advanceRef.current = true;
+          setTtsChapterPos((prev) => prev + 1);
+        } else {
+          setActive(false);
+        }
         return;
       }
 
@@ -168,7 +187,8 @@ export function useTts(spreadBlocks: ContentBlock[], onPageRight: () => void) {
         setSpeaking(false);
         setHighlightBlockIndex(null);
         if (continueRef.current) {
-          onPageRightRef.current();
+          advanceRef.current = true;
+          setTtsChapterPos((prev) => prev + 1);
         } else {
           setActive(false);
         }
@@ -187,6 +207,26 @@ export function useTts(spreadBlocks: ContentBlock[], onPageRight: () => void) {
     [],
   );
 
+  // Auto-advance: when ttsChapterPos changes due to an advanceRef flag,
+  // load the next chapter's blocks and speak them.
+  useEffect(() => {
+    if (!advanceRef.current) return;
+    advanceRef.current = false;
+    const pos = ttsChapterPosRef.current;
+    if (pos >= chaptersRef.current.length) {
+      setActive(false);
+      return;
+    }
+    const blocks = chaptersRef.current[pos]?.blocks ?? [];
+    if (blocks.length > 0) {
+      speakBlocks(blocks, 0, 0);
+    } else {
+      // Empty chapter — skip it.
+      advanceRef.current = true;
+      setTtsChapterPos((prev) => prev + 1);
+    }
+  }, [ttsChapterPos, speakBlocks]);
+
   // Stop on unmount (window close).
   useEffect(() => {
     return () => {
@@ -194,29 +234,22 @@ export function useTts(spreadBlocks: ContentBlock[], onPageRight: () => void) {
     };
   }, []);
 
-  // Auto-speak when spread/chapter changes during continuous playback.
-  const prevBlocksRef = useRef(spreadBlocks);
-  useEffect(() => {
-    if (
-      continueRef.current &&
-      spreadBlocks !== prevBlocksRef.current &&
-      spreadBlocks.length > 0
-    ) {
-      speakBlocks(spreadBlocks, 0, 0);
-    }
-    prevBlocksRef.current = spreadBlocks;
-  }, [spreadBlocks, speakBlocks]);
-
   const start = useCallback(
     (origin: TtsSelection) => {
       continueRef.current = true;
-      speakBlocks(spreadBlocks, origin.blockIndex, origin.charOffset);
+      advanceRef.current = false;
+      const pos = readerChapterPosRef.current;
+      ttsChapterPosRef.current = pos;
+      setTtsChapterPos(pos);
+      const blocks = chaptersRef.current[pos]?.blocks ?? [];
+      speakBlocks(blocks, origin.blockIndex, origin.charOffset);
     },
-    [spreadBlocks, speakBlocks],
+    [readerChapterPosRef, speakBlocks],
   );
 
   const stop = useCallback(() => {
     continueRef.current = false;
+    advanceRef.current = false;
     window.speechSynthesis.cancel();
     utteranceIdRef.current += 1;
     setActive(false);
@@ -235,15 +268,24 @@ export function useTts(spreadBlocks: ContentBlock[], onPageRight: () => void) {
 
   const skipBack = useCallback(() => {
     continueRef.current = true;
-    speakBlocks(spreadBlocks, 0, 0);
-  }, [spreadBlocks, speakBlocks]);
+    advanceRef.current = false;
+    const blocks =
+      chaptersRef.current[ttsChapterPosRef.current]?.blocks ?? [];
+    speakBlocks(blocks, 0, 0);
+  }, [speakBlocks]);
 
   const skipFwd = useCallback(() => {
     continueRef.current = true;
     window.speechSynthesis.cancel();
     utteranceIdRef.current += 1;
-    onPageRight();
-  }, [onPageRight]);
+    const nextPos = ttsChapterPosRef.current + 1;
+    if (nextPos >= chaptersRef.current.length) {
+      setActive(false);
+      return;
+    }
+    advanceRef.current = true;
+    setTtsChapterPos(nextPos);
+  }, []);
 
   // Keep highlightBlockRef in sync so voice/rate changes restart from the
   // current block instead of jumping back to the beginning.
@@ -257,11 +299,14 @@ export function useTts(spreadBlocks: ContentBlock[], onPageRight: () => void) {
       rateRef.current = r;
       persistConfig();
       if (continueRef.current) {
+        advanceRef.current = false;
         const blockIdx = highlightBlockRef.current ?? 0;
-        speakBlocks(spreadBlocks, blockIdx, 0);
+        const blocks =
+          chaptersRef.current[ttsChapterPosRef.current]?.blocks ?? [];
+        speakBlocks(blocks, blockIdx, 0);
       }
     },
-    [spreadBlocks, speakBlocks, persistConfig],
+    [speakBlocks, persistConfig],
   );
 
   const setVoiceAndUpdate = useCallback(
@@ -270,11 +315,14 @@ export function useTts(spreadBlocks: ContentBlock[], onPageRight: () => void) {
       voiceRef.current = v;
       persistConfig();
       if (continueRef.current) {
+        advanceRef.current = false;
         const blockIdx = highlightBlockRef.current ?? 0;
-        speakBlocks(spreadBlocks, blockIdx, 0);
+        const blocks =
+          chaptersRef.current[ttsChapterPosRef.current]?.blocks ?? [];
+        speakBlocks(blocks, blockIdx, 0);
       }
     },
-    [spreadBlocks, speakBlocks, persistConfig],
+    [speakBlocks, persistConfig],
   );
 
   const setBackend = useCallback(
@@ -304,5 +352,6 @@ export function useTts(spreadBlocks: ContentBlock[], onPageRight: () => void) {
     paused,
     highlightBlockIndex,
     active,
+    ttsChapterPos,
   };
 }
