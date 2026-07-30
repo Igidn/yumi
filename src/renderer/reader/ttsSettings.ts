@@ -29,7 +29,9 @@ export async function loadTtsConfig(): Promise<TtsConfig> {
           ? parsed.backend
           : DEFAULT_CONFIG.backend,
       rate:
-        typeof parsed.rate === "number" && parsed.rate >= 0.5 && parsed.rate <= 2
+        typeof parsed.rate === "number" &&
+        parsed.rate >= 0.5 &&
+        parsed.rate <= 2
           ? parsed.rate
           : DEFAULT_CONFIG.rate,
       voiceId:

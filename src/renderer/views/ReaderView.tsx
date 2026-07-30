@@ -67,8 +67,12 @@ export function ReaderView({ bookId }: { bookId: number }) {
   const [panel, setPanel] = useState<Panel>(null);
   const [appearanceOpen, setAppearanceOpen] = useState(false);
   const [drawingOpen, setDrawingOpen] = useState(false);
-  const [contextMenuPos, setContextMenuPos] = useState<{ x: number; y: number } | null>(null);
-  const [contextMenuSelection, setContextMenuSelection] = useState<TtsSelection | null>(null);
+  const [contextMenuPos, setContextMenuPos] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
+  const [contextMenuSelection, setContextMenuSelection] =
+    useState<TtsSelection | null>(null);
   const [jump, setJump] = useState<PageJump | null>(null);
   const [reposition, setReposition] = useState<Reposition | null>(null);
   /** Slide direction for chapter-switch animation: -1 prev, 1 next, 0 none. */

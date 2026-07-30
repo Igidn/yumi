@@ -1,10 +1,4 @@
-import {
-  Pause,
-  Play,
-  SkipBack,
-  SkipForward,
-  Square,
-} from "lucide-react";
+import { Pause, Play, SkipBack, SkipForward, Square } from "lucide-react";
 
 import type { TtsVoice } from "../../shared/types";
 

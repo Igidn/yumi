@@ -1,22 +1,26 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import type { ContentBlock, TtsBackend, TtsSelection, TtsVoice } from "../../shared/types";
+import type {
+  ContentBlock,
+  TtsBackend,
+  TtsSelection,
+  TtsVoice,
+} from "../../shared/types";
 import { loadTtsConfig, saveTtsConfig } from "./ttsSettings";
 
 // Module-level var to pass persisted voice ID between effects (avoids window pollution).
 let pendingVoiceId: string | null = null;
 
-export function useTts(
-  spreadBlocks: ContentBlock[],
-  onPageRight: () => void,
-) {
+export function useTts(spreadBlocks: ContentBlock[], onPageRight: () => void) {
   const [backend, setBackendState] = useState<TtsBackend>("web");
   const [rate, setRateState] = useState(1);
   const [voice, setVoiceState] = useState<TtsVoice | null>(null);
   const [voices, setVoices] = useState<TtsVoice[]>([]);
   const [speaking, setSpeaking] = useState(false);
   const [paused, setPaused] = useState(false);
-  const [highlightBlockIndex, setHighlightBlockIndex] = useState<number | null>(null);
+  const [highlightBlockIndex, setHighlightBlockIndex] = useState<number | null>(
+    null,
+  );
   const [active, setActive] = useState(false);
 
   const continueRef = useRef(false);
@@ -31,9 +35,15 @@ export function useTts(
   // Track the last highlight block so voice/rate changes can restart from it.
   const highlightBlockRef = useRef<number | null>(null);
 
-  useEffect(() => { rateRef.current = rate; }, [rate]);
-  useEffect(() => { voiceRef.current = voice; }, [voice]);
-  useEffect(() => { backendRef.current = backend; }, [backend]);
+  useEffect(() => {
+    rateRef.current = rate;
+  }, [rate]);
+  useEffect(() => {
+    voiceRef.current = voice;
+  }, [voice]);
+  useEffect(() => {
+    backendRef.current = backend;
+  }, [backend]);
 
   // Persist helper: snapshot current config to app_settings.
   const persistConfig = useCallback(() => {
@@ -56,7 +66,9 @@ export function useTts(
       // voice restore is deferred until voices are populated below
       pendingVoiceId = cfg.voiceId;
     });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Load available voices from Web Speech API. Restore persisted voice once
@@ -265,11 +277,14 @@ export function useTts(
     [spreadBlocks, speakBlocks, persistConfig],
   );
 
-  const setBackend = useCallback((b: TtsBackend) => {
-    setBackendState(b);
-    backendRef.current = b;
-    persistConfig();
-  }, [persistConfig]);
+  const setBackend = useCallback(
+    (b: TtsBackend) => {
+      setBackendState(b);
+      backendRef.current = b;
+      persistConfig();
+    },
+    [persistConfig],
+  );
 
   return {
     start,

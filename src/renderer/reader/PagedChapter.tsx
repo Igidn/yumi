@@ -509,7 +509,8 @@ export function PagedChapter({
               ) : (
                 block.text
               );
-              const ttsClass = highlightBlockIndex === i ? "reader-tts-speaking" : "";
+              const ttsClass =
+                highlightBlockIndex === i ? "reader-tts-speaking" : "";
               if (block.type === "heading") {
                 const level = Math.min(6, Math.max(1, block.level ?? 1));
                 const Tag = `h${level}` as "h1";
