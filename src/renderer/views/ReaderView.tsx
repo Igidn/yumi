@@ -1,4 +1,4 @@
-import { List, Pen, Search, Undo2 } from "lucide-react";
+import { List, Pen, Search, Undo2, Volume2 } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -88,6 +88,7 @@ export function ReaderView({ bookId }: { bookId: number }) {
   const hideTimer = useRef<number | null>(null);
   // macOS native fullscreen: traffic lights vanish, move content left.
   const [isFullScreen, setIsFullScreen] = useState(false);
+  const [ttsBarVisible, setTtsBarVisible] = useState(false);
   const isMac = window.yumi.platform === "darwin";
 
   const nonceRef = useRef(1);
@@ -219,6 +220,11 @@ export function ReaderView({ bookId }: { bookId: number }) {
     ttsChapterBlocks,
     useCallback(() => handleOverflow(1), [handleOverflow]),
   );
+
+  // Auto-hide the TTS bar when playback ends naturally.
+  useEffect(() => {
+    if (!tts.active) setTtsBarVisible(false);
+  }, [tts.active]);
 
   // Fragment target + nonce for scrolling after chapter mount (nonce forces re-fire).
   const [fragmentTarget, setFragmentTarget] = useState<{
@@ -532,6 +538,18 @@ export function ReaderView({ bookId }: { bookId: number }) {
             AA
           </button>
           <button
+            onClick={() => setTtsBarVisible((v) => !v)}
+            className={`rounded-[6px] p-1.5 transition-colors ${
+              ttsBarVisible
+                ? "text-reader"
+                : "text-reader-muted hover:text-reader"
+            }`}
+            aria-label={ttsBarVisible ? "Hide read-aloud controls" : "Show read-aloud controls"}
+            aria-pressed={ttsBarVisible}
+          >
+            <Volume2 size={17} strokeWidth={1.75} />
+          </button>
+          <button
             onClick={() => {
               setAppearanceOpen(false);
               setPanel((p) => (p === "search" ? null : "search"));
@@ -626,16 +644,24 @@ export function ReaderView({ bookId }: { bookId: number }) {
         speaking={tts.speaking}
         paused={tts.paused}
         onPlayPause={() => {
-          if (tts.paused) tts.resume();
-          else if (tts.speaking) tts.pause();
+          if (!tts.active && !tts.speaking) {
+            tts.start({ blockIndex: 0, charOffset: 0 });
+          } else if (tts.paused) {
+            tts.resume();
+          } else if (tts.speaking) {
+            tts.pause();
+          }
         }}
         onSkipBack={tts.skipBack}
         onSkipFwd={tts.skipFwd}
-        onStop={tts.stop}
+        onStop={() => {
+          tts.stop();
+          setTtsBarVisible(false);
+        }}
         voices={tts.voices}
         voice={tts.voice}
         onVoiceChange={tts.setVoice}
-        visible={tts.active}
+        visible={ttsBarVisible}
       />
 
       {/* Context menu */}
