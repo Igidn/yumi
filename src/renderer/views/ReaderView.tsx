@@ -221,6 +221,18 @@ export function ReaderView({ bookId }: { bookId: number }) {
   // TTS: independent playback position, decoupled from reader chapter.
   const tts = useTts(payload?.chapters ?? [], readerChapterPosRef);
 
+  // Auto-advance reader chapter when TTS advances (only if reader was on the same chapter).
+  const prevTtsChapterPosRef = useRef(tts.ttsChapterPos);
+  useEffect(() => {
+    const prev = prevTtsChapterPosRef.current;
+    if (tts.ttsChapterPos !== prev) {
+      prevTtsChapterPosRef.current = tts.ttsChapterPos;
+      if (chapterPos === prev) {
+        goToChapter(tts.ttsChapterPos, 0);
+      }
+    }
+  }, [tts.ttsChapterPos, chapterPos, goToChapter]);
+
   // TTS bar visible when user toggled it on AND TTS is active on current chapter.
   const ttsBarVisible =
     userToggledBar && tts.active && chapterPos === tts.ttsChapterPos;

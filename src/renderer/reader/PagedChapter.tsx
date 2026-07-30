@@ -228,6 +228,10 @@ export function PagedChapter({
 
   // Chapter switches remount via key={chapter.id} in ReaderView.
 
+  // Track the spread of the last TTS highlight so auto-turn only fires
+  // when the reader was actually on the TTS page.
+  const prevHighlightSpreadRef = useRef<number | null>(null);
+
   const measure = useCallback(() => {
     const viewport = viewportRef.current;
     const content = contentRef.current;
@@ -351,6 +355,31 @@ export function PagedChapter({
     const timer = setTimeout(() => el.classList.remove("reader-flash"), 10000);
     return () => clearTimeout(timer);
   }, [jump, geom]);
+
+  // Auto-turn: when TTS highlight moves to a block on a different spread,
+  // turn the page — but only if the reader was already on the previous TTS spread.
+  useEffect(() => {
+    if (highlightBlockIndex == null || !geom) return;
+    const content = contentRef.current;
+    if (!content) return;
+    const el = content.querySelector<HTMLElement>(
+      `[data-b="${highlightBlockIndex}"]`,
+    );
+    if (!el) return;
+    const contentRect = content.getBoundingClientRect();
+    const elRect = el.getBoundingClientRect();
+    const xOffset = elRect.left - contentRect.left;
+    const targetSpread = Math.floor(xOffset / (geom.stride * geom.perSpread));
+
+    const prevSpread = prevHighlightSpreadRef.current;
+    prevHighlightSpreadRef.current = targetSpread;
+
+    // Only auto-turn if the reader was on the previous TTS spread.
+    if (targetSpread !== spread && spread === prevSpread) {
+      setAnimate(true);
+      setSpread(Math.min(Math.max(0, targetSpread), geom.spreads - 1));
+    }
+  }, [highlightBlockIndex, geom, spread]);
 
   // Fragment-based scroll: find the element with the matching id and scroll to its spread.
   useEffect(() => {
