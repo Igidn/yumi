@@ -7,8 +7,9 @@ import {
   useState,
 } from "react";
 
-import type { ReaderPayload } from "../../shared/types";
+import type { ReaderPayload, TtsSelection } from "../../shared/types";
 import { AppearanceMenu } from "../reader/AppearanceMenu";
+import { ContextMenu, getTtsSelection } from "../reader/ContextMenu";
 import { FloatingPanel } from "../reader/FloatingPanel";
 import {
   countChapterCols,
@@ -25,6 +26,8 @@ import {
   saveReaderSettings,
 } from "../reader/settings";
 import { TocPanel } from "../reader/TocPanel";
+import { TtsBar } from "../reader/TtsBar";
+import { useTts } from "../reader/useTts";
 
 /** px from top of viewport considered "hovering the header zone" */
 const HEADER_HOVER_ZONE = 80;
@@ -64,6 +67,8 @@ export function ReaderView({ bookId }: { bookId: number }) {
   const [panel, setPanel] = useState<Panel>(null);
   const [appearanceOpen, setAppearanceOpen] = useState(false);
   const [drawingOpen, setDrawingOpen] = useState(false);
+  const [contextMenuPos, setContextMenuPos] = useState<{ x: number; y: number } | null>(null);
+  const [contextMenuSelection, setContextMenuSelection] = useState<TtsSelection | null>(null);
   const [jump, setJump] = useState<PageJump | null>(null);
   const [reposition, setReposition] = useState<Reposition | null>(null);
   /** Slide direction for chapter-switch animation: -1 prev, 1 next, 0 none. */
@@ -147,6 +152,21 @@ export function ReaderView({ bookId }: { bookId: number }) {
     };
   }, [flushProgress]);
 
+  // Context menu: right-click on reader content → show "Speak" if text selected.
+  const handleContextMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    const sel = getTtsSelection();
+    if (sel) {
+      setContextMenuPos({ x: e.clientX, y: e.clientY });
+      setContextMenuSelection(sel);
+    }
+  }, []);
+
+  const dismissContextMenu = useCallback(() => {
+    setContextMenuPos(null);
+    setContextMenuSelection(null);
+  }, []);
+
   // Reading-time heartbeat for the library goal/streak panel. Ticks only
   // while this window is visible and focused, so an idle-open book never
   // inflates the daily count.
@@ -187,6 +207,13 @@ export function ReaderView({ bookId }: { bookId: number }) {
       goToChapter(chapterPos + dir, dir === 1 ? 0 : 1);
     },
     [chapterPos, goToChapter],
+  );
+
+  // TTS: speak through the current chapter, auto-advance on end.
+  const ttsChapterBlocks = payload?.chapters[chapterPos]?.blocks ?? [];
+  const tts = useTts(
+    ttsChapterBlocks,
+    useCallback(() => handleOverflow(1), [handleOverflow]),
   );
 
   // Fragment target + nonce for scrolling after chapter mount (nonce forces re-fire).
@@ -435,7 +462,7 @@ export function ReaderView({ bookId }: { bookId: number }) {
 
   return (
     <div
-      className={`reader-${theme} flex h-screen flex-col overflow-hidden bg-reader font-ui text-reader`}
+      className={`reader-${theme} relative flex h-screen flex-col overflow-hidden bg-reader font-ui text-reader`}
       onMouseMove={handleHeaderMouseMove}
     >
       {/* Chrome header — drag region for the frameless window.
@@ -535,9 +562,11 @@ export function ReaderView({ bookId }: { bookId: number }) {
             jump={jump}
             reposition={reposition}
             fragmentTarget={fragmentTarget}
+            highlightBlockIndex={tts.highlightBlockIndex}
             onSpreadChange={handleSpreadChange}
             onOverflow={handleOverflow}
             onLinkNavigate={handleLinkNavigate}
+            onContextMenu={handleContextMenu}
           />
         </div>
       ) : (
@@ -584,6 +613,36 @@ export function ReaderView({ bookId }: { bookId: number }) {
           )}
         </div>
       </footer>
+
+      {/* TTS control bar */}
+      <TtsBar
+        backend={tts.backend}
+        rate={tts.rate}
+        onRateChange={tts.setRate}
+        speaking={tts.speaking}
+        paused={tts.paused}
+        onPlayPause={() => {
+          if (tts.paused) tts.resume();
+          else if (tts.speaking) tts.pause();
+        }}
+        onSkipBack={tts.skipBack}
+        onSkipFwd={tts.skipFwd}
+        onStop={tts.stop}
+        voices={tts.voices}
+        voice={tts.voice}
+        onVoiceChange={tts.setVoice}
+        visible={tts.active}
+      />
+
+      {/* Context menu */}
+      <ContextMenu
+        visible={contextMenuPos !== null}
+        x={contextMenuPos?.x ?? 0}
+        y={contextMenuPos?.y ?? 0}
+        selection={contextMenuSelection}
+        onSpeak={tts.start}
+        onDismiss={dismissContextMenu}
+      />
 
       {/* Panels */}
       {panel === "toc" && (

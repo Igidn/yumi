@@ -2,6 +2,19 @@ export type Platform = "darwin" | "win32" | "linux";
 
 export type BookFormat = "epub";
 
+export type TtsBackend = "edge" | "kokoro" | "web";
+
+export interface TtsVoice {
+  name: string;
+  lang: string;
+  id: string;
+}
+
+export interface TtsSelection {
+  blockIndex: number;
+  charOffset: number;
+}
+
 export interface Book {
   id: number;
   title: string;

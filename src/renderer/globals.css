@@ -187,6 +187,20 @@
   text-decoration: underline;
 }
 
+/* TTS speaking highlight — per-theme subtle background on the active block. */
+.reader-dark .reader-tts-speaking {
+  background: rgba(255 255 255 / 0.08);
+  border-radius: 3px;
+}
+.reader-sepia .reader-tts-speaking {
+  background: rgba(180 140 80 / 0.15);
+  border-radius: 3px;
+}
+.reader-light .reader-tts-speaking {
+  background: rgba(0 0 0 / 0.06);
+  border-radius: 3px;
+}
+
 /* Flash-highlight for the block a search result jumped to. */
 @keyframes reader-flash {
   0% {

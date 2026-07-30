@@ -189,6 +189,8 @@ export function PagedChapter({
   onOverflow,
   onLinkNavigate,
   fragmentTarget,
+  highlightBlockIndex,
+  onContextMenu,
 }: {
   chapter: ReaderChapter;
   fontSize: number;
@@ -203,6 +205,10 @@ export function PagedChapter({
   onLinkNavigate?: (chapterIndex: number, fragment: string | null) => void;
   /** Fragment ID + nonce to scroll to after geometry is measured (nonce forces re-fire). */
   fragmentTarget?: { fragment: string | null; nonce: number };
+  /** Block index currently spoken by TTS — gets the `reader-tts-speaking` class. */
+  highlightBlockIndex?: number | null;
+  /** Right-click on reader content. */
+  onContextMenu?: (e: React.MouseEvent) => void;
 }) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -463,6 +469,7 @@ export function PagedChapter({
             ref={contentRef}
             lang="en"
             onClick={handleContentClick}
+            onContextMenu={onContextMenu}
             className={`reader-content text-reader${animate ? " transition-transform duration-200 ease-out" : ""}`}
             style={{
               width: geom ? geom.contentWidth : "100%",
@@ -502,6 +509,7 @@ export function PagedChapter({
               ) : (
                 block.text
               );
+              const ttsClass = highlightBlockIndex === i ? "reader-tts-speaking" : "";
               if (block.type === "heading") {
                 const level = Math.min(6, Math.max(1, block.level ?? 1));
                 const Tag = `h${level}` as "h1";
@@ -510,7 +518,7 @@ export function PagedChapter({
                     key={i}
                     id={block.fragment || undefined}
                     data-b={i}
-                    className={headingClass(level, i === 0)}
+                    className={`${headingClass(level, i === 0)} ${ttsClass}`}
                   >
                     {body}
                   </Tag>
@@ -525,7 +533,7 @@ export function PagedChapter({
                   key={i}
                   id={block.fragment || undefined}
                   data-b={i}
-                  className={indent ? "reader-indent" : undefined}
+                  className={`${indent ? "reader-indent" : ""} ${ttsClass}`}
                 >
                   {body}
                 </p>
