@@ -25,6 +25,7 @@ export function TtsBar({
   backend,
   rate,
   onRateChange,
+  speaking,
   paused,
   onPlayPause,
   onSkipBack,
