@@ -269,8 +269,7 @@ export function useTts(
   const skipBack = useCallback(() => {
     continueRef.current = true;
     advanceRef.current = false;
-    const blocks =
-      chaptersRef.current[ttsChapterPosRef.current]?.blocks ?? [];
+    const blocks = chaptersRef.current[ttsChapterPosRef.current]?.blocks ?? [];
     speakBlocks(blocks, 0, 0);
   }, [speakBlocks]);
 

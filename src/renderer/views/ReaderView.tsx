@@ -88,7 +88,7 @@ export function ReaderView({ bookId }: { bookId: number }) {
   const hideTimer = useRef<number | null>(null);
   // macOS native fullscreen: traffic lights vanish, move content left.
   const [isFullScreen, setIsFullScreen] = useState(false);
-  const [ttsBarVisible, setTtsBarVisible] = useState(false);
+  const [userToggledBar, setUserToggledBar] = useState(false);
   const isMac = window.yumi.platform === "darwin";
 
   const nonceRef = useRef(1);
@@ -221,11 +221,9 @@ export function ReaderView({ bookId }: { bookId: number }) {
   // TTS: independent playback position, decoupled from reader chapter.
   const tts = useTts(payload?.chapters ?? [], readerChapterPosRef);
 
-  // Auto-hide the TTS bar when playback ends or user skims away.
-  useEffect(() => {
-    if (!tts.active) setTtsBarVisible(false);
-    if (tts.active && chapterPos !== tts.ttsChapterPos) setTtsBarVisible(false);
-  }, [tts.active, chapterPos, tts.ttsChapterPos]);
+  // TTS bar visible when user toggled it on AND TTS is active on current chapter.
+  const ttsBarVisible =
+    userToggledBar && tts.active && chapterPos === tts.ttsChapterPos;
 
   // Fragment target + nonce for scrolling after chapter mount (nonce forces re-fire).
   const [fragmentTarget, setFragmentTarget] = useState<{
@@ -541,14 +539,14 @@ export function ReaderView({ bookId }: { bookId: number }) {
           <button
             onClick={() => {
               if (tts.active && chapterPos !== tts.ttsChapterPos) {
-                setTtsBarVisible(true);
+                setUserToggledBar(true);
                 goToChapter(tts.ttsChapterPos, 0);
                 setJump({
                   blockIndex: tts.highlightBlockIndex ?? 0,
                   nonce: nonceRef.current++,
                 });
               } else {
-                setTtsBarVisible((v) => !v);
+                setUserToggledBar((v) => !v);
               }
             }}
             className={`rounded-[6px] p-1.5 transition-colors ${
@@ -603,8 +601,8 @@ export function ReaderView({ bookId }: { bookId: number }) {
             reposition={reposition}
             fragmentTarget={fragmentTarget}
             highlightBlockIndex={
-            chapterPos === tts.ttsChapterPos ? tts.highlightBlockIndex : null
-          }
+              chapterPos === tts.ttsChapterPos ? tts.highlightBlockIndex : null
+            }
             onSpreadChange={handleSpreadChange}
             onOverflow={handleOverflow}
             onLinkNavigate={handleLinkNavigate}
@@ -676,7 +674,7 @@ export function ReaderView({ bookId }: { bookId: number }) {
         onSkipFwd={tts.skipFwd}
         onStop={() => {
           tts.stop();
-          setTtsBarVisible(false);
+          setUserToggledBar(false);
         }}
         voices={tts.voices}
         voice={tts.voice}
