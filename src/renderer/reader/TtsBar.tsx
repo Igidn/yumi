@@ -99,12 +99,12 @@ export function TtsBar({
         <button
           onClick={onPlayPause}
           className="rounded-md p-1 hover:text-reader transition-colors"
-          aria-label={paused ? "Resume" : "Pause"}
+          aria-label={speaking && !paused ? "Pause" : "Play"}
         >
-          {paused ? (
-            <Play size={16} strokeWidth={2} />
-          ) : (
+          {speaking && !paused ? (
             <Pause size={16} strokeWidth={2} />
+          ) : (
+            <Play size={16} strokeWidth={2} />
           )}
         </button>
 
