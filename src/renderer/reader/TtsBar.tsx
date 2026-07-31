@@ -57,9 +57,6 @@ export function TtsBar({
         >
           <option value="edge">Edge</option>
           <option value="web">Web</option>
-          <option value="kokoro" disabled>
-            Kokoro (soon)
-          </option>
         </select>
 
         <span className="mx-0.5 h-4 w-px bg-reader-edge" />
