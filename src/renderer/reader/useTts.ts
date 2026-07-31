@@ -136,7 +136,9 @@ export function useTts(
         if (i > startBlockIdx) text += " ";
         const startChar = text.length;
         text += blockText;
-        blockMap.push({ blockIndex: i, startChar, endChar: text.length });
+        // endChar extends one past the last char to cover the inter-block
+        // space so onboundary charIndex never falls into a gap.
+        blockMap.push({ blockIndex: i, startChar, endChar: text.length + 1 });
       }
 
       if (!text.trim()) {

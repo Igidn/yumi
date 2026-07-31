@@ -233,6 +233,9 @@ export function PagedChapter({
   // Track the spread of the last TTS highlight so auto-turn only fires
   // when the reader was actually on the TTS page.
   const prevHighlightSpreadRef = useRef<number | null>(null);
+  // Debounce auto-turn so transient highlight glitches (unreliable
+  // onboundary charIndex on some platforms) don't trigger false turns.
+  const autoTurnTimerRef = useRef<number | null>(null);
 
   const measure = useCallback(() => {
     const viewport = viewportRef.current;
@@ -384,6 +387,8 @@ export function PagedChapter({
 
   // Auto-turn: when TTS highlight moves to a block on a different spread,
   // turn the page — but only if the reader was already on the previous TTS spread.
+  // Debounced (250ms) so transient highlight glitches (e.g. onboundary charIndex
+  // reporting sentence-relative offsets on some platforms) don't trigger false turns.
   useEffect(() => {
     if (highlightBlockIndex == null || !geom) return;
     const content = contentRef.current;
@@ -400,11 +405,33 @@ export function PagedChapter({
     const prevSpread = prevHighlightSpreadRef.current;
     prevHighlightSpreadRef.current = targetSpread;
 
-    // Only auto-turn if the reader was on the previous TTS spread.
-    if (targetSpread !== spread && spread === prevSpread) {
+    if (targetSpread === spread || spread !== prevSpread) {
+      // No turn needed, or reader manually paged away — clear any pending timer.
+      if (autoTurnTimerRef.current !== null) {
+        window.clearTimeout(autoTurnTimerRef.current);
+        autoTurnTimerRef.current = null;
+      }
+      return;
+    }
+
+    // Debounce: only turn after the highlight has been on the target spread
+    // for 250ms without interruption. A glitch that reverts within the window
+    // is cancelled by the next effect run.
+    if (autoTurnTimerRef.current !== null) {
+      window.clearTimeout(autoTurnTimerRef.current);
+    }
+    autoTurnTimerRef.current = window.setTimeout(() => {
+      autoTurnTimerRef.current = null;
       setAnimate(true);
       setSpread(Math.min(Math.max(0, targetSpread), geom.spreads - 1));
-    }
+    }, 250);
+
+    return () => {
+      if (autoTurnTimerRef.current !== null) {
+        window.clearTimeout(autoTurnTimerRef.current);
+        autoTurnTimerRef.current = null;
+      }
+    };
   }, [highlightBlockIndex, geom, spread]);
 
   // Fragment-based scroll: find the element with the matching id and scroll to its spread.
