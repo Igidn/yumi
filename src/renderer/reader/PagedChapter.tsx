@@ -332,10 +332,7 @@ export function PagedChapter({
             r.right > cr.left &&
             r.left < cr.right
           ) {
-            firstVisibleBlockIndex = parseInt(
-              el.getAttribute("data-b")!,
-              10,
-            );
+            firstVisibleBlockIndex = parseInt(el.getAttribute("data-b")!, 10);
             break;
           }
         }
