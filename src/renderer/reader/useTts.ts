@@ -152,6 +152,29 @@ export function useTts(
         return;
       }
 
+      // Build word-to-block mapping so we can track TTS position by
+      // counting onboundary word events instead of trusting charIndex
+      // (which is sentence-relative on some platforms).
+      const wordBlockMap: number[] = [];
+      let ci = 0;
+      while (ci < text.length) {
+        while (ci < text.length && /\s/.test(text[ci])) ci++;
+        if (ci >= text.length) break;
+        const wordStart = ci;
+        while (ci < text.length && !/\s/.test(text[ci])) ci++;
+        const match = blockMap.find(
+          (b) => wordStart >= b.startChar && wordStart < b.endChar,
+        );
+        wordBlockMap.push(
+          match
+            ? match.blockIndex
+            : wordBlockMap.length > 0
+              ? wordBlockMap[wordBlockMap.length - 1]
+              : 0,
+        );
+      }
+      let wordIndex = 0;
+
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.rate = rateRef.current;
       const vid = voiceRef.current?.id;
@@ -162,12 +185,13 @@ export function useTts(
 
       utterance.onboundary = (e) => {
         if (utteranceIdRef.current !== myId) return;
-        if (e.name === "word" && e.charIndex !== undefined) {
-          const idx = e.charIndex;
-          const match = blockMap.find(
-            (b) => idx >= b.startChar && idx < b.endChar,
-          );
-          if (match) setHighlightBlockIndex(match.blockIndex);
+        if (e.name === "word") {
+          const blockIndex =
+            wordIndex < wordBlockMap.length
+              ? wordBlockMap[wordIndex]
+              : wordBlockMap[wordBlockMap.length - 1] ?? 0;
+          setHighlightBlockIndex(blockIndex);
+          wordIndex++;
         }
       };
 
