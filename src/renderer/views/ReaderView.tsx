@@ -233,9 +233,9 @@ export function ReaderView({ bookId }: { bookId: number }) {
     }
   }, [tts.ttsChapterPos, chapterPos, goToChapter]);
 
-  // TTS bar visible when user toggled it on AND TTS is active on current chapter.
+  // TTS bar visible when user toggled it on. If TTS is active, only on its chapter.
   const ttsBarVisible =
-    userToggledBar && tts.active && chapterPos === tts.ttsChapterPos;
+    userToggledBar && (!tts.active || chapterPos === tts.ttsChapterPos);
 
   // Fragment target + nonce for scrolling after chapter mount (nonce forces re-fire).
   const [fragmentTarget, setFragmentTarget] = useState<{
