@@ -675,7 +675,10 @@ export function ReaderView({ bookId }: { bookId: number }) {
         paused={tts.paused}
         onPlayPause={() => {
           if (!tts.active && !tts.speaking) {
-            tts.start({ blockIndex: 0, charOffset: 0 });
+            tts.start({
+              blockIndex: pageInfo?.firstVisibleBlockIndex ?? 0,
+              charOffset: 0,
+            });
           } else if (tts.paused) {
             tts.resume();
           } else if (tts.speaking) {

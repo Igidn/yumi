@@ -52,6 +52,8 @@ export interface SpreadInfo {
   contentHeight: number;
   colWidth: number;
   colGap: number;
+  /** First block index visible on the current spread, or null if unknown. */
+  firstVisibleBlockIndex: number | null;
 }
 
 /** Offscreen CSS-column count for one chapter under a known layout. */
@@ -314,6 +316,32 @@ export function PagedChapter({
     if (!geom) return;
     const fraction = geom.spreads <= 1 ? 1 : spread / (geom.spreads - 1);
     fractionRef.current = fraction;
+
+    // Find the first visible block on the current spread.
+    let firstVisibleBlockIndex: number | null = null;
+    const content = contentRef.current;
+    if (content) {
+      const clipEl = content.parentElement;
+      if (clipEl) {
+        const cr = clipEl.getBoundingClientRect();
+        for (const el of content.querySelectorAll<HTMLElement>("[data-b]")) {
+          const r = el.getBoundingClientRect();
+          if (
+            r.bottom > cr.top &&
+            r.top < cr.bottom &&
+            r.right > cr.left &&
+            r.left < cr.right
+          ) {
+            firstVisibleBlockIndex = parseInt(
+              el.getAttribute("data-b")!,
+              10,
+            );
+            break;
+          }
+        }
+      }
+    }
+
     onSpreadChange({
       spread,
       spreads: geom.spreads,
@@ -324,6 +352,7 @@ export function PagedChapter({
       contentHeight: geom.contentHeight,
       colWidth: geom.colWidth,
       colGap: geom.colGap,
+      firstVisibleBlockIndex,
     });
   }, [spread, geom]); // eslint-disable-line react-hooks/exhaustive-deps
 
