@@ -5,12 +5,85 @@ import type {
   ReaderChapter,
   TtsBackend,
   TtsSelection,
+  TtsSpeakResult,
   TtsVoice,
+  WordBoundary,
 } from "../../shared/types";
 import { loadTtsConfig, saveTtsConfig } from "./ttsSettings";
 
 // Module-level var to pass persisted voice ID between effects (avoids window pollution).
 let pendingVoiceId: string | null = null;
+
+interface BlockMapEntry {
+  blockIndex: number;
+  startChar: number;
+  endChar: number;
+}
+
+/** One ~3-paragraph chunk sent to the TTS engine. */
+interface TtsSegment {
+  text: string;
+  blockMap: BlockMapEntry[];
+}
+
+// Preload window: segments up to LOOKAHEAD past the one currently playing
+// are requested from main. ~3 paragraphs synth in ~1–2s vs ~10–15s of
+// playback, so the queue converges to 1–2 buffered segments.
+const LOOKAHEAD = 2;
+const SEG_PARAGRAPHS = 3;
+const SEG_MAX_CHARS = 600;
+
+/** Split blocks into ~3-paragraph segments, skipping images and empty blocks. */
+function segmentBlocks(
+  blocks: ContentBlock[],
+  startBlockIdx: number,
+  startCharOff: number,
+): TtsSegment[] {
+  const segs: TtsSegment[] = [];
+  let text = "";
+  let blockMap: BlockMapEntry[] = [];
+  let paraCount = 0;
+  const flush = () => {
+    if (text.trim()) segs.push({ text, blockMap });
+    text = "";
+    blockMap = [];
+    paraCount = 0;
+  };
+  for (let i = startBlockIdx; i < blocks.length; i++) {
+    const b = blocks[i];
+    if (b.type === "image") continue;
+    const blockText = i === startBlockIdx ? b.text.slice(startCharOff) : b.text;
+    if (!blockText.trim()) continue;
+    if (blockMap.length > 0) text += " ";
+    const start = text.length;
+    text += blockText;
+    // endChar extends past the last char to cover the inter-block space.
+    blockMap.push({ blockIndex: i, startChar: start, endChar: text.length + 1 });
+    paraCount++;
+    if (paraCount >= SEG_PARAGRAPHS || text.length >= SEG_MAX_CHARS) flush();
+  }
+  flush();
+  return segs;
+}
+
+/** Block index for each whitespace token, in text order. */
+function buildWordBlockMap(text: string, blockMap: BlockMapEntry[]): number[] {
+  const out: number[] = [];
+  let ci = 0;
+  while (ci < text.length) {
+    while (ci < text.length && /\s/.test(text[ci])) ci++;
+    if (ci >= text.length) break;
+    const wordStart = ci;
+    while (ci < text.length && !/\s/.test(text[ci])) ci++;
+    const match = blockMap.find(
+      (b) => wordStart >= b.startChar && wordStart < b.endChar,
+    );
+    out.push(
+      match ? match.blockIndex : out.length > 0 ? out[out.length - 1] : 0,
+    );
+  }
+  return out;
+}
 
 export function useTts(
   chapters: ReaderChapter[],
@@ -22,6 +95,7 @@ export function useTts(
   const [voices, setVoices] = useState<TtsVoice[]>([]);
   const [speaking, setSpeaking] = useState(false);
   const [paused, setPaused] = useState(false);
+  const [buffering, setBuffering] = useState(false);
   const [highlightBlockIndex, setHighlightBlockIndex] = useState<number | null>(
     null,
   );
@@ -59,6 +133,223 @@ export function useTts(
     backendRef.current = backend;
   }, [backend]);
 
+  // --- Segmented pipeline (edge/kokoro): preloader + AudioContext chaining ---
+  const genRef = useRef(0);
+  const segmentsRef = useRef<TtsSegment[]>([]);
+  const buffersRef = useRef<
+    Map<number, { buffer: AudioBuffer; words: WordBoundary[] }>
+  >(new Map());
+  const currentSegRef = useRef(0);
+  const requestedUpToRef = useRef(-1);
+  const ensurePreloadedRef = useRef<() => void>(() => {});
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const sourceRef = useRef<AudioBufferSourceNode | null>(null);
+  const highlightTimerRef = useRef<number | null>(null);
+  // Segment cache: key = chapterId|startBlock|startChar|voice|rate. Session-
+  // scoped LRU so skip-back and re-listening don't re-synthesize.
+  const cacheRef = useRef<Map<string, TtsSpeakResult>>(new Map());
+  const CACHE_MAX = 32;
+
+  const getAudioCtx = useCallback(() => {
+    if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
+    return audioCtxRef.current;
+  }, []);
+
+  const stopHighlightLoop = useCallback(() => {
+    if (highlightTimerRef.current !== null) {
+      window.clearInterval(highlightTimerRef.current);
+      highlightTimerRef.current = null;
+    }
+  }, []);
+
+  const cacheGet = useCallback((key: string): TtsSpeakResult | undefined => {
+    const hit = cacheRef.current.get(key);
+    if (hit) {
+      // Refresh LRU order.
+      cacheRef.current.delete(key);
+      cacheRef.current.set(key, hit);
+    }
+    return hit;
+  }, []);
+
+  const cachePut = useCallback((key: string, res: TtsSpeakResult) => {
+    cacheRef.current.set(key, res);
+    if (cacheRef.current.size > CACHE_MAX) {
+      const oldest = cacheRef.current.keys().next().value;
+      if (oldest !== undefined) cacheRef.current.delete(oldest);
+    }
+  }, []);
+
+  const playSegment = useCallback(
+    function playSegmentImpl(idx: number) {
+      const gen = genRef.current;
+      const segs = segmentsRef.current;
+      if (idx >= segs.length) {
+        // Chapter finished; stop preloading (no cross-chapter synth).
+        stopHighlightLoop();
+        setHighlightBlockIndex(null);
+        setSpeaking(false);
+        if (continueRef.current) {
+          advanceRef.current = true;
+          setTtsChapterPos((prev) => prev + 1);
+        } else {
+          setActive(false);
+        }
+        return;
+      }
+      currentSegRef.current = idx;
+      const entry = buffersRef.current.get(idx);
+      if (!entry) {
+        setBuffering(true);
+        return;
+      }
+      setBuffering(false);
+      const ctx = getAudioCtx();
+      void ctx.resume();
+      const src = ctx.createBufferSource();
+      src.buffer = entry.buffer;
+      src.connect(ctx.destination);
+      const startAt = ctx.currentTime + 0.05;
+      src.start(startAt);
+      sourceRef.current = src;
+      setSpeaking(true);
+      setPaused(false);
+
+      // Highlight: word time offsets are in the segment's audio timeline, so
+      // map elapsed time → word → block. Token-count alignment with the
+      // engine's word stream can drift by a word or two; paragraph-level
+      // highlighting tolerates that.
+      const tokenBlocks = buildWordBlockMap(segs[idx].text, segs[idx].blockMap);
+      let wi = 0;
+      stopHighlightLoop();
+      highlightTimerRef.current = window.setInterval(() => {
+        const elapsed = ctx.currentTime - startAt;
+        while (wi < entry.words.length - 1 && entry.words[wi + 1].time <= elapsed)
+          wi++;
+        const blockIdx =
+          tokenBlocks[Math.min(wi, tokenBlocks.length - 1)] ?? null;
+        setHighlightBlockIndex(blockIdx);
+      }, 100);
+
+      src.onended = () => {
+        if (genRef.current !== gen) return;
+        stopHighlightLoop();
+        setHighlightBlockIndex(null);
+        if (continueRef.current) {
+          playSegmentImpl(idx + 1);
+        } else {
+          setSpeaking(false);
+          setActive(false);
+        }
+      };
+      void ensurePreloadedRef.current();
+    },
+    [getAudioCtx, stopHighlightLoop],
+  );
+
+  const storeSegment = useCallback(
+    async (idx: number, res: TtsSpeakResult) => {
+      const gen = genRef.current;
+      const ctx = getAudioCtx();
+      const bin = atob(res.audioBase64);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      const buffer = await ctx.decodeAudioData(bytes.buffer);
+      if (genRef.current !== gen) return;
+      buffersRef.current.set(idx, { buffer, words: res.words });
+      if (idx === currentSegRef.current) playSegment(idx);
+    },
+    [getAudioCtx, playSegment],
+  );
+
+  const stop = useCallback(() => {
+    continueRef.current = false;
+    advanceRef.current = false;
+    window.speechSynthesis.cancel();
+    utteranceIdRef.current += 1;
+    genRef.current += 1;
+    stopHighlightLoop();
+    sourceRef.current?.stop();
+    sourceRef.current = null;
+    buffersRef.current.clear();
+    segmentsRef.current = [];
+    requestedUpToRef.current = -1;
+    setBuffering(false);
+    void window.yumi.invoke("tts:stop").catch(() => {});
+    setActive(false);
+    setSpeaking(false);
+    setPaused(false);
+    setHighlightBlockIndex(null);
+  }, [stopHighlightLoop]);
+
+  // Preload rule: keep segments up to LOOKAHEAD past the one currently
+  // playing requested from main. Runs after every render so it always
+  // captures the latest callbacks; only ever invoked from event handlers.
+  useEffect(() => {
+    ensurePreloadedRef.current = () => {
+      const gen = genRef.current;
+      const segs = segmentsRef.current;
+      const maxReq = Math.min(
+        segs.length,
+        currentSegRef.current + LOOKAHEAD + 1,
+      );
+      const chapterId = chaptersRef.current[ttsChapterPosRef.current]?.id;
+      while (requestedUpToRef.current + 1 < maxReq) {
+        const idx = ++requestedUpToRef.current;
+        const seg = segs[idx];
+        const key = `${chapterId}|${idx}|${voiceRef.current?.id ?? ""}|${
+          rateRef.current
+        }`;
+        const cached = cacheGet(key);
+        if (cached) {
+          void storeSegment(idx, cached);
+          continue;
+        }
+        window.yumi
+          .invoke("tts:speak", {
+            text: seg.text,
+            voice: voiceRef.current?.id ?? null,
+            rate: rateRef.current,
+          })
+          .then((res) => {
+            if (genRef.current !== gen) return;
+            cachePut(key, res);
+            void storeSegment(idx, res);
+          })
+          .catch((err) => {
+            if (genRef.current !== gen) return;
+            console.error("tts:speak failed", err);
+            stop();
+          });
+      }
+    };
+  });
+
+  /** Start the segmented pipeline for a chapter (edge/kokoro). */
+  const startEdge = useCallback(
+    (blocks: ContentBlock[], startBlockIdx: number, startCharOff: number) => {      genRef.current += 1;
+      stopHighlightLoop();
+      sourceRef.current?.stop();
+      sourceRef.current = null;
+      segmentsRef.current = segmentBlocks(blocks, startBlockIdx, startCharOff);
+      buffersRef.current.clear();
+      requestedUpToRef.current = -1;
+      currentSegRef.current = 0;
+      setActive(true);
+      setSpeaking(true);
+      setPaused(false);
+      // Create/resume the context synchronously inside the user gesture so
+      // playback isn't subject to autoplay policies on strict platforms.
+      void getAudioCtx().resume();
+      void window.yumi.invoke("tts:stop").catch(() => {});
+      ensurePreloadedRef.current();
+      playSegment(0);
+    },
+    [stopHighlightLoop, playSegment, getAudioCtx],
+  );
+
+  // --- Web Speech API path (unchanged behavior) ---
+
   // Persist helper: snapshot current config to app_settings.
   const persistConfig = useCallback(() => {
     saveTtsConfig({
@@ -85,9 +376,19 @@ export function useTts(
     };
   }, []);
 
-  // Load available voices from Web Speech API. Restore persisted voice once
-  // the voice list is populated (may be async on some platforms).
+  const restorePendingVoice = useCallback((list: TtsVoice[]) => {
+    if (!pendingVoiceId) return;
+    const match = list.find((v) => v.id === pendingVoiceId);
+    if (match) {
+      setVoiceState(match);
+      voiceRef.current = match;
+    }
+    pendingVoiceId = null;
+  }, []);
+
+  // Load available voices from Web Speech API.
   useEffect(() => {
+    if (backend !== "web") return;
     const synth = window.speechSynthesis;
     const populate = () => {
       const list = synth.getVoices().map((v) => ({
@@ -96,22 +397,31 @@ export function useTts(
         id: v.voiceURI,
       }));
       setVoices(list);
-      // Restore persisted voice if we have a pending ID.
-      if (pendingVoiceId) {
-        const match = list.find((v) => v.id === pendingVoiceId);
-        if (match) {
-          setVoiceState(match);
-          voiceRef.current = match;
-        }
-        pendingVoiceId = null;
-      }
+      restorePendingVoice(list);
     };
     populate();
     synth.onvoiceschanged = populate;
     return () => {
       synth.onvoiceschanged = null;
     };
-  }, []);
+  }, [backend, restorePendingVoice]);
+
+  // Load available voices from the edge backend.
+  useEffect(() => {
+    if (backend !== "edge") return;
+    let cancelled = false;
+    window.yumi
+      .invoke("tts:voices")
+      .then((list) => {
+        if (cancelled) return;
+        setVoices(list);
+        restorePendingVoice(list);
+      })
+      .catch((err) => console.error("tts:voices failed", err));
+    return () => {
+      cancelled = true;
+    };
+  }, [backend, restorePendingVoice]);
 
   const speakBlocks = useCallback(
     (blocks: ContentBlock[], startBlockIdx: number, startCharOff: number) => {
@@ -121,11 +431,7 @@ export function useTts(
       const myId = utteranceIdRef.current;
 
       let text = "";
-      const blockMap: {
-        blockIndex: number;
-        startChar: number;
-        endChar: number;
-      }[] = [];
+      const blockMap: BlockMapEntry[] = [];
 
       for (let i = startBlockIdx; i < blocks.length; i++) {
         const block = blocks[i];
@@ -155,24 +461,7 @@ export function useTts(
       // Build word-to-block mapping so we can track TTS position by
       // counting onboundary word events instead of trusting charIndex
       // (which is sentence-relative on some platforms).
-      const wordBlockMap: number[] = [];
-      let ci = 0;
-      while (ci < text.length) {
-        while (ci < text.length && /\s/.test(text[ci])) ci++;
-        if (ci >= text.length) break;
-        const wordStart = ci;
-        while (ci < text.length && !/\s/.test(text[ci])) ci++;
-        const match = blockMap.find(
-          (b) => wordStart >= b.startChar && wordStart < b.endChar,
-        );
-        wordBlockMap.push(
-          match
-            ? match.blockIndex
-            : wordBlockMap.length > 0
-              ? wordBlockMap[wordBlockMap.length - 1]
-              : 0,
-        );
-      }
+      const wordBlockMap = buildWordBlockMap(text, blockMap);
       let wordIndex = 0;
 
       const utterance = new SpeechSynthesisUtterance(text);
@@ -233,6 +522,22 @@ export function useTts(
     [],
   );
 
+  /** Speak a whole chapter from the start, dispatching on backend. */
+  const speakChapter = useCallback(
+    (pos: number) => {
+      const blocks = chaptersRef.current[pos]?.blocks ?? [];
+      if (blocks.length > 0) {
+        if (backendRef.current === "web") speakBlocks(blocks, 0, 0);
+        else startEdge(blocks, 0, 0);
+      } else {
+        // Empty chapter — skip it.
+        advanceRef.current = true;
+        setTtsChapterPos((prev) => prev + 1);
+      }
+    },
+    [speakBlocks, startEdge],
+  );
+
   // Auto-advance: when ttsChapterPos changes due to an advanceRef flag,
   // load the next chapter's blocks and speak them.
   useEffect(() => {
@@ -243,22 +548,8 @@ export function useTts(
       setActive(false);
       return;
     }
-    const blocks = chaptersRef.current[pos]?.blocks ?? [];
-    if (blocks.length > 0) {
-      speakBlocks(blocks, 0, 0);
-    } else {
-      // Empty chapter — skip it.
-      advanceRef.current = true;
-      setTtsChapterPos((prev) => prev + 1);
-    }
-  }, [ttsChapterPos, speakBlocks]);
-
-  // Stop on unmount (window close).
-  useEffect(() => {
-    return () => {
-      window.speechSynthesis.cancel();
-    };
-  }, []);
+    speakChapter(pos);
+  }, [ttsChapterPos, speakChapter]);
 
   const start = useCallback(
     (origin: TtsSelection) => {
@@ -268,36 +559,40 @@ export function useTts(
       ttsChapterPosRef.current = pos;
       setTtsChapterPos(pos);
       const blocks = chaptersRef.current[pos]?.blocks ?? [];
-      speakBlocks(blocks, origin.blockIndex, origin.charOffset);
+      if (backendRef.current === "web") {
+        speakBlocks(blocks, origin.blockIndex, origin.charOffset);
+      } else {
+        startEdge(blocks, origin.blockIndex, origin.charOffset);
+      }
     },
-    [readerChapterPosRef, speakBlocks],
+    [readerChapterPosRef, speakBlocks, startEdge],
   );
 
-  const stop = useCallback(() => {
-    continueRef.current = false;
-    advanceRef.current = false;
-    window.speechSynthesis.cancel();
-    utteranceIdRef.current += 1;
-    setActive(false);
-    setSpeaking(false);
-    setPaused(false);
-    setHighlightBlockIndex(null);
-  }, []);
-
   const pause = useCallback(() => {
-    window.speechSynthesis.pause();
+    if (backendRef.current === "web") {
+      window.speechSynthesis.pause();
+    } else {
+      void audioCtxRef.current?.suspend();
+      setPaused(true);
+    }
   }, []);
 
   const resume = useCallback(() => {
-    window.speechSynthesis.resume();
+    if (backendRef.current === "web") {
+      window.speechSynthesis.resume();
+    } else {
+      void audioCtxRef.current?.resume();
+      setPaused(false);
+    }
   }, []);
 
   const skipBack = useCallback(() => {
     continueRef.current = true;
     advanceRef.current = false;
     const blocks = chaptersRef.current[ttsChapterPosRef.current]?.blocks ?? [];
-    speakBlocks(blocks, 0, 0);
-  }, [speakBlocks]);
+    if (backendRef.current === "web") speakBlocks(blocks, 0, 0);
+    else startEdge(blocks, 0, 0);
+  }, [speakBlocks, startEdge]);
 
   const skipFwd = useCallback(() => {
     continueRef.current = true;
@@ -328,10 +623,11 @@ export function useTts(
         const blockIdx = highlightBlockRef.current ?? 0;
         const blocks =
           chaptersRef.current[ttsChapterPosRef.current]?.blocks ?? [];
-        speakBlocks(blocks, blockIdx, 0);
+        if (backendRef.current === "web") speakBlocks(blocks, blockIdx, 0);
+        else startEdge(blocks, blockIdx, 0);
       }
     },
-    [speakBlocks, persistConfig],
+    [speakBlocks, startEdge, persistConfig],
   );
 
   const setVoiceAndUpdate = useCallback(
@@ -344,20 +640,38 @@ export function useTts(
         const blockIdx = highlightBlockRef.current ?? 0;
         const blocks =
           chaptersRef.current[ttsChapterPosRef.current]?.blocks ?? [];
-        speakBlocks(blocks, blockIdx, 0);
+        if (backendRef.current === "web") speakBlocks(blocks, blockIdx, 0);
+        else startEdge(blocks, blockIdx, 0);
       }
     },
-    [speakBlocks, persistConfig],
+    [speakBlocks, startEdge, persistConfig],
   );
 
   const setBackend = useCallback(
     (b: TtsBackend) => {
+      if (b === backendRef.current) return;
       setBackendState(b);
       backendRef.current = b;
+      // Backend voice lists are disjoint; drop the selection until the new
+      // list populates (restore-on-mount handles the persisted voice).
+      setVoiceState(null);
+      voiceRef.current = null;
       persistConfig();
     },
     [persistConfig],
   );
+
+  // Stop on unmount (window close).
+  useEffect(() => {
+    return () => {
+      window.speechSynthesis.cancel();
+      genRef.current += 1;
+      stopHighlightLoop();
+      sourceRef.current?.stop();
+      void window.yumi.invoke("tts:stop").catch(() => {});
+      void audioCtxRef.current?.close().catch(() => {});
+    };
+  }, [stopHighlightLoop]);
 
   return {
     start,
@@ -375,6 +689,7 @@ export function useTts(
     voices,
     speaking,
     paused,
+    buffering,
     highlightBlockIndex,
     active,
     ttsChapterPos,

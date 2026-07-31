@@ -1,16 +1,17 @@
 import { Pause, Play, SkipBack, SkipForward, Square } from "lucide-react";
 
-import type { TtsVoice } from "../../shared/types";
+import type { TtsBackend, TtsVoice } from "../../shared/types";
 
 const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 
 interface TtsBarProps {
-  /** "web" only for now. */
-  backend: string;
+  backend: TtsBackend;
+  onBackendChange: (b: TtsBackend) => void;
   rate: number;
   onRateChange: (r: number) => void;
   speaking: boolean;
   paused: boolean;
+  buffering: boolean;
   onPlayPause: () => void;
   onSkipBack: () => void;
   onSkipFwd: () => void;
@@ -23,10 +24,12 @@ interface TtsBarProps {
 
 export function TtsBar({
   backend,
+  onBackendChange,
   rate,
   onRateChange,
   speaking,
   paused,
+  buffering,
   onPlayPause,
   onSkipBack,
   onSkipFwd,
@@ -45,10 +48,19 @@ export function TtsBar({
       }`}
     >
       <div className="flex items-center gap-1.5 text-[12px] text-reader-muted">
-        {/* Backend label (non-functional until Edge/Kokoro are added) */}
-        <span className="select-none rounded-md bg-reader-edge/40 px-2 py-1 text-[11px] font-medium text-reader">
-          {backend === "web" ? "Web" : backend}
-        </span>
+        {/* Backend switcher (Kokoro lands later) */}
+        <select
+          value={backend}
+          onChange={(e) => onBackendChange(e.target.value as TtsBackend)}
+          className="appearance-none rounded-md bg-reader-edge/40 px-2 py-1 text-[11px] font-medium text-reader outline-none cursor-pointer"
+          aria-label="Backend"
+        >
+          <option value="edge">Edge</option>
+          <option value="web">Web</option>
+          <option value="kokoro" disabled>
+            Kokoro (soon)
+          </option>
+        </select>
 
         <span className="mx-0.5 h-4 w-px bg-reader-edge" />
 
@@ -99,8 +111,10 @@ export function TtsBar({
 
         <button
           onClick={onPlayPause}
-          className="rounded-md p-1 hover:text-reader transition-colors"
-          aria-label={speaking && !paused ? "Pause" : "Play"}
+          className={`rounded-md p-1 transition-colors hover:text-reader ${
+            buffering ? "animate-pulse text-reader" : ""
+          }`}
+          aria-label={buffering ? "Buffering…" : speaking && !paused ? "Pause" : "Play"}
         >
           {speaking && !paused ? (
             <Pause size={16} strokeWidth={2} />

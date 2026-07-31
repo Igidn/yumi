@@ -669,10 +669,12 @@ export function ReaderView({ bookId }: { bookId: number }) {
       {/* TTS control bar */}
       <TtsBar
         backend={tts.backend}
+        onBackendChange={tts.setBackend}
         rate={tts.rate}
         onRateChange={tts.setRate}
         speaking={tts.speaking}
         paused={tts.paused}
+        buffering={tts.buffering}
         onPlayPause={() => {
           if (!tts.active && !tts.speaking) {
             tts.start({
