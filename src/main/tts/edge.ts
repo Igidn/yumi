@@ -57,7 +57,8 @@ async function synthOnce(
       });
     }
   }
-  if (audio.length === 0) throw new NoAudioReceived("edge-tts: no audio received");
+  if (audio.length === 0)
+    throw new NoAudioReceived("edge-tts: no audio received");
 
   return {
     audioBase64: Buffer.concat(audio).toString("base64"),
