@@ -203,6 +203,11 @@ export function useTts(
       }
       currentSegRef.current = idx;
       const entry = buffersRef.current.get(idx);
+      // First block of this segment = N+1 of the last spoken one. While the
+      // segment is still synthesizing, park the highlight there without
+      // starting word counting (the interval below is the word counter).
+      const firstBlock = segs[idx]?.blockMap[0]?.blockIndex ?? null;
+      setHighlightBlockIndex(firstBlock);
       if (!entry) {
         setBuffering(true);
         return;
