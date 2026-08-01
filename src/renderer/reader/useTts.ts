@@ -149,8 +149,9 @@ export function useTts(
   const audioCtxRef = useRef<AudioContext | null>(null);
   const sourceRef = useRef<AudioBufferSourceNode | null>(null);
   const highlightTimerRef = useRef<number | null>(null);
-  // Segment cache: key = chapterId|startBlock|startChar|voice|rate. Session-
-  // scoped LRU so skip-back and re-listening don't re-synthesize.
+  // Segment cache: key = text|voice|rate. Session-scoped LRU so skip-back
+  // and re-listening don't re-synthesize. Keyed by text (not segment index)
+  // because segments are re-chunked from the start offset on each restart.
   const cacheRef = useRef<Map<string, TtsSpeakResult>>(new Map());
   const CACHE_MAX = 32;
 
@@ -305,11 +306,13 @@ export function useTts(
         segs.length,
         currentSegRef.current + LOOKAHEAD + 1,
       );
-      const chapterId = chaptersRef.current[ttsChapterPosRef.current]?.id;
       while (requestedUpToRef.current + 1 < maxReq) {
         const idx = ++requestedUpToRef.current;
         const seg = segs[idx];
-        const key = `${chapterId}|${idx}|${voiceRef.current?.id ?? ""}|${
+        // Key by synthesized text, not segment index: segments are re-chunked
+        // from the start offset on every restart, so an index-only key makes a
+        // mid-chapter restart replay the original run's segments from cache.
+        const key = `${seg.text}|${voiceRef.current?.id ?? ""}|${
           rateRef.current
         }`;
         const cached = cacheGet(key);
@@ -672,6 +675,8 @@ export function useTts(
   const setBackend = useCallback(
     (b: TtsBackend) => {
       if (b === backendRef.current) return;
+      // Halt the current provider (Edge source / Web utterance) before switching.
+      stop();
       setBackendState(b);
       backendRef.current = b;
       // Backend voice lists are disjoint; drop the selection until the new
@@ -680,7 +685,7 @@ export function useTts(
       voiceRef.current = null;
       persistConfig();
     },
-    [persistConfig],
+    [stop, persistConfig],
   );
 
   // Stop on unmount (window close).
