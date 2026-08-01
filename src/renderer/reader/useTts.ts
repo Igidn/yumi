@@ -346,6 +346,11 @@ export function useTts(
       setActive(true);
       setSpeaking(true);
       setPaused(false);
+      // Tracking highlight appears instantly on the first spoken block;
+      // word counting only starts once that segment's audio arrives.
+      setHighlightBlockIndex(
+        segmentsRef.current[0]?.blockMap[0]?.blockIndex ?? null,
+      );
       // Create/resume the context synchronously inside the user gesture so
       // playback isn't subject to autoplay policies on strict platforms.
       void getAudioCtx().resume();
@@ -465,6 +470,10 @@ export function useTts(
         }
         return;
       }
+
+      // Tracking highlight appears instantly on the first spoken block;
+      // word boundaries move it once speech actually starts.
+      setHighlightBlockIndex(blockMap[0]?.blockIndex ?? null);
 
       // Build word-to-block mapping so we can track TTS position by
       // counting onboundary word events instead of trusting charIndex
