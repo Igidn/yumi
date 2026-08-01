@@ -58,7 +58,11 @@ function segmentBlocks(
     const start = text.length;
     text += blockText;
     // endChar extends past the last char to cover the inter-block space.
-    blockMap.push({ blockIndex: i, startChar: start, endChar: text.length + 1 });
+    blockMap.push({
+      blockIndex: i,
+      startChar: start,
+      endChar: text.length + 1,
+    });
     paraCount++;
     if (paraCount >= SEG_PARAGRAPHS || text.length >= SEG_MAX_CHARS) flush();
   }
@@ -224,7 +228,10 @@ export function useTts(
       stopHighlightLoop();
       highlightTimerRef.current = window.setInterval(() => {
         const elapsed = ctx.currentTime - startAt;
-        while (wi < entry.words.length - 1 && entry.words[wi + 1].time <= elapsed)
+        while (
+          wi < entry.words.length - 1 &&
+          entry.words[wi + 1].time <= elapsed
+        )
           wi++;
         const blockIdx =
           tokenBlocks[Math.min(wi, tokenBlocks.length - 1)] ?? null;
@@ -327,7 +334,8 @@ export function useTts(
 
   /** Start the segmented pipeline for a chapter (edge/kokoro). */
   const startEdge = useCallback(
-    (blocks: ContentBlock[], startBlockIdx: number, startCharOff: number) => {      genRef.current += 1;
+    (blocks: ContentBlock[], startBlockIdx: number, startCharOff: number) => {
+      genRef.current += 1;
       stopHighlightLoop();
       sourceRef.current?.stop();
       sourceRef.current = null;
@@ -478,7 +486,7 @@ export function useTts(
           const blockIndex =
             wordIndex < wordBlockMap.length
               ? wordBlockMap[wordIndex]
-              : wordBlockMap[wordBlockMap.length - 1] ?? 0;
+              : (wordBlockMap[wordBlockMap.length - 1] ?? 0);
           setHighlightBlockIndex(blockIndex);
           wordIndex++;
         }

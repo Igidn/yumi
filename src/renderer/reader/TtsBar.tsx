@@ -111,7 +111,9 @@ export function TtsBar({
           className={`rounded-md p-1 transition-colors hover:text-reader ${
             buffering ? "animate-pulse text-reader" : ""
           }`}
-          aria-label={buffering ? "Buffering…" : speaking && !paused ? "Pause" : "Play"}
+          aria-label={
+            buffering ? "Buffering…" : speaking && !paused ? "Pause" : "Play"
+          }
         >
           {speaking && !paused ? (
             <Pause size={16} strokeWidth={2} />

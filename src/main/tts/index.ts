@@ -1,11 +1,7 @@
 import { listVoicesUniversal } from "edge-tts-universal";
 import { ipcMain } from "electron";
 
-import type {
-  IPCPayloads,
-  TtsSpeakResult,
-  TtsVoice,
-} from "../../shared/types";
+import type { IPCPayloads, TtsSpeakResult, TtsVoice } from "../../shared/types";
 import { synthesizeEdgeSegment } from "./edge";
 
 interface SynthJob {
