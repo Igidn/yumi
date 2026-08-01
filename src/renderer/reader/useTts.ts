@@ -108,6 +108,8 @@ export function useTts(
   const [ttsChapterPos, setTtsChapterPos] = useState(0);
 
   const continueRef = useRef(false);
+  /** Authoritative pause flag for the edge backend (state can lag during buffering). */
+  const pausedRef = useRef(false);
   const rateRef = useRef(1);
   const voiceRef = useRef<TtsVoice | null>(null);
   const backendRef = useRef<TtsBackend>("web");
@@ -215,7 +217,12 @@ export function useTts(
       }
       setBuffering(false);
       const ctx = getAudioCtx();
-      void ctx.resume();
+      // Don't clobber an in-flight pause: the context is suspended, the source
+      // below still gets scheduled and plays once the user resumes.
+      if (!pausedRef.current) {
+        void ctx.resume();
+        setPaused(false);
+      }
       const src = ctx.createBufferSource();
       src.buffer = entry.buffer;
       src.connect(ctx.destination);
@@ -223,7 +230,6 @@ export function useTts(
       src.start(startAt);
       sourceRef.current = src;
       setSpeaking(true);
-      setPaused(false);
 
       // Highlight: word time offsets are in the segment's audio timeline, so
       // map elapsed time → word → block. Token-count alignment with the
@@ -292,6 +298,7 @@ export function useTts(
     setActive(false);
     setSpeaking(false);
     setPaused(false);
+    pausedRef.current = false;
     setHighlightBlockIndex(null);
   }, [stopHighlightLoop]);
 
@@ -354,6 +361,7 @@ export function useTts(
       setActive(true);
       setSpeaking(true);
       setPaused(false);
+      pausedRef.current = false;
       // Tracking highlight appears instantly on the first spoken block;
       // word counting only starts once that segment's audio arrives.
       setHighlightBlockIndex(
@@ -597,6 +605,7 @@ export function useTts(
     if (backendRef.current === "web") {
       window.speechSynthesis.pause();
     } else {
+      pausedRef.current = true;
       void audioCtxRef.current?.suspend();
       setPaused(true);
     }
@@ -606,6 +615,7 @@ export function useTts(
     if (backendRef.current === "web") {
       window.speechSynthesis.resume();
     } else {
+      pausedRef.current = false;
       void audioCtxRef.current?.resume();
       setPaused(false);
     }
