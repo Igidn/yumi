@@ -1,4 +1,4 @@
-import { Communicate } from "edge-tts-universal";
+import { Communicate, NoAudioReceived } from "edge-tts-universal";
 
 import type { TtsSpeakResult, WordBoundary } from "../../shared/types";
 
@@ -16,9 +16,28 @@ export async function synthesizeEdgeSegment(
   rate: number,
 ): Promise<TtsSpeakResult> {
   const ratePct = Math.round((rate - 1) * 100);
+  const rateStr = `${ratePct >= 0 ? "+" : ""}${ratePct}%`;
+
+  // Edge's readaloud WS occasionally closes before any audio arrives
+  // (NoAudioReceived) — transient, a fresh connection usually succeeds.
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await synthOnce(text, voice, rateStr);
+    } catch (e) {
+      if (attempt >= 3 || !(e instanceof NoAudioReceived)) throw e;
+      await new Promise((r) => setTimeout(r, attempt * 500));
+    }
+  }
+}
+
+async function synthOnce(
+  text: string,
+  voice: string | null,
+  rateStr: string,
+): Promise<TtsSpeakResult> {
   const communicate = new Communicate(text, {
     voice: voice ?? DEFAULT_VOICE,
-    rate: `${ratePct >= 0 ? "+" : ""}${ratePct}%`,
+    rate: rateStr,
   });
 
   const audio: Buffer[] = [];
@@ -38,7 +57,7 @@ export async function synthesizeEdgeSegment(
       });
     }
   }
-  if (audio.length === 0) throw new Error("edge-tts: no audio received");
+  if (audio.length === 0) throw new NoAudioReceived("edge-tts: no audio received");
 
   return {
     audioBase64: Buffer.concat(audio).toString("base64"),
