@@ -235,7 +235,7 @@ export function ReaderView({ bookId }: { bookId: number }) {
 
   // TTS bar visible when user toggled it on. If TTS is active, only on its chapter.
   const ttsBarVisible =
-    (userToggledBar || tts.active) && chapterPos === tts.ttsChapterPos;
+    userToggledBar && (!tts.active || chapterPos === tts.ttsChapterPos);
 
   // Fragment target + nonce for scrolling after chapter mount (nonce forces re-fire).
   const [fragmentTarget, setFragmentTarget] = useState<{
@@ -677,6 +677,7 @@ export function ReaderView({ bookId }: { bookId: number }) {
         buffering={tts.buffering}
         onPlayPause={() => {
           if (!tts.active && !tts.speaking) {
+            setUserToggledBar(true);
             tts.start({
               blockIndex: pageInfo?.firstVisibleBlockIndex ?? 0,
               charOffset: 0,
@@ -705,7 +706,10 @@ export function ReaderView({ bookId }: { bookId: number }) {
         x={contextMenuPos?.x ?? 0}
         y={contextMenuPos?.y ?? 0}
         selection={contextMenuSelection}
-        onSpeak={tts.start}
+        onSpeak={(sel) => {
+          setUserToggledBar(true);
+          tts.start(sel);
+        }}
         onDismiss={dismissContextMenu}
       />
 
