@@ -192,6 +192,7 @@ export function PagedChapter({
   onLinkNavigate,
   fragmentTarget,
   highlightBlockIndex,
+  onTtsSpreadChange,
   onContextMenu,
 }: {
   chapter: ReaderChapter;
@@ -209,6 +210,8 @@ export function PagedChapter({
   fragmentTarget?: { fragment: string | null; nonce: number };
   /** Block index currently spoken by TTS — gets the `reader-tts-speaking` class. */
   highlightBlockIndex?: number | null;
+  /** Spread the TTS highlight currently sits on (null until first highlight). */
+  onTtsSpreadChange?: (spread: number) => void;
   /** Right-click on reader content. */
   onContextMenu?: (e: React.MouseEvent) => void;
 }) {
@@ -401,6 +404,7 @@ export function PagedChapter({
     const elRect = el.getBoundingClientRect();
     const xOffset = elRect.left - contentRect.left;
     const targetSpread = Math.floor(xOffset / (geom.stride * geom.perSpread));
+    onTtsSpreadChange?.(targetSpread);
 
     const prevSpread = prevHighlightSpreadRef.current;
     prevHighlightSpreadRef.current = targetSpread;
@@ -432,7 +436,7 @@ export function PagedChapter({
         autoTurnTimerRef.current = null;
       }
     };
-  }, [highlightBlockIndex, geom, spread]);
+  }, [highlightBlockIndex, geom, spread, onTtsSpreadChange]);
 
   // Fragment-based scroll: find the element with the matching id and scroll to its spread.
   useEffect(() => {

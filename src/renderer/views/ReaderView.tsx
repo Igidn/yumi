@@ -88,7 +88,10 @@ export function ReaderView({ bookId }: { bookId: number }) {
   const hideTimer = useRef<number | null>(null);
   // macOS native fullscreen: traffic lights vanish, move content left.
   const [isFullScreen, setIsFullScreen] = useState(false);
-  const [userToggledBar, setUserToggledBar] = useState(false);
+  /** Spread the TTS highlight sits on; reported by PagedChapter's auto-turn. */
+  const [ttsSpread, setTtsSpread] = useState<number | null>(null);
+  /** User manually hid the bar while listening (toggles via the header button). */
+  const [barHidden, setBarHidden] = useState(false);
   const isMac = window.yumi.platform === "darwin";
 
   const nonceRef = useRef(1);
@@ -233,9 +236,14 @@ export function ReaderView({ bookId }: { bookId: number }) {
     }
   }, [tts.ttsChapterPos, chapterPos, goToChapter]);
 
-  // TTS bar visible when user toggled it on. If TTS is active, only on its chapter.
+  // TTS bar appears only while TTS is reading and the user is on the spread
+  // it reads from — not on other spreads, chapters, or when TTS is idle.
+  // The user can hide it manually (barHidden) and toggle it back.
   const ttsBarVisible =
-    userToggledBar && (!tts.active || chapterPos === tts.ttsChapterPos);
+    tts.active &&
+    chapterPos === tts.ttsChapterPos &&
+    pageInfo?.spread === ttsSpread &&
+    !barHidden;
 
   // Fragment target + nonce for scrolling after chapter mount (nonce forces re-fire).
   const [fragmentTarget, setFragmentTarget] = useState<{
@@ -550,24 +558,47 @@ export function ReaderView({ bookId }: { bookId: number }) {
           </button>
           <button
             onClick={() => {
-              if (tts.active && chapterPos !== tts.ttsChapterPos) {
-                setUserToggledBar(true);
-                goToChapter(tts.ttsChapterPos, 0);
-                setJump({
-                  blockIndex: tts.highlightBlockIndex ?? 0,
-                  nonce: nonceRef.current++,
-                });
+              if (tts.active) {
+                if (
+                  chapterPos === tts.ttsChapterPos &&
+                  pageInfo?.spread === ttsSpread
+                ) {
+                  // On the reading position: toggle the bar.
+                  setBarHidden((v) => !v);
+                } else {
+                  // Jump to the read-aloud position; the bar appears on arrival.
+                  setBarHidden(false);
+                  goToChapter(tts.ttsChapterPos, 0);
+                  setJump({
+                    blockIndex: tts.highlightBlockIndex ?? 0,
+                    nonce: nonceRef.current++,
+                  });
+                }
               } else {
-                setUserToggledBar((v) => !v);
+                // Idle: start reading from the current spread.
+                setBarHidden(false);
+                tts.start({
+                  blockIndex: pageInfo?.firstVisibleBlockIndex ?? 0,
+                  charOffset: 0,
+                });
               }
             }}
             className={`rounded-[6px] p-1.5 transition-colors ${
-              ttsBarVisible || (tts.active && chapterPos !== tts.ttsChapterPos)
+              ttsBarVisible ||
+              (tts.active &&
+                !(
+                  chapterPos === tts.ttsChapterPos &&
+                  pageInfo?.spread === ttsSpread
+                ))
                 ? "text-reader"
                 : "text-reader-muted hover:text-reader"
             }`}
             aria-label={
-              tts.active && chapterPos !== tts.ttsChapterPos
+              tts.active &&
+              !(
+                chapterPos === tts.ttsChapterPos &&
+                pageInfo?.spread === ttsSpread
+              )
                 ? "Jump to read-aloud position"
                 : ttsBarVisible
                   ? "Hide read-aloud controls"
@@ -615,6 +646,7 @@ export function ReaderView({ bookId }: { bookId: number }) {
             highlightBlockIndex={
               chapterPos === tts.ttsChapterPos ? tts.highlightBlockIndex : null
             }
+            onTtsSpreadChange={setTtsSpread}
             onSpreadChange={handleSpreadChange}
             onOverflow={handleOverflow}
             onLinkNavigate={handleLinkNavigate}
@@ -676,13 +708,7 @@ export function ReaderView({ bookId }: { bookId: number }) {
         paused={tts.paused}
         buffering={tts.buffering}
         onPlayPause={() => {
-          if (!tts.active && !tts.speaking) {
-            setUserToggledBar(true);
-            tts.start({
-              blockIndex: pageInfo?.firstVisibleBlockIndex ?? 0,
-              charOffset: 0,
-            });
-          } else if (tts.paused) {
+          if (tts.paused) {
             tts.resume();
           } else if (tts.speaking) {
             tts.pause();
@@ -690,10 +716,7 @@ export function ReaderView({ bookId }: { bookId: number }) {
         }}
         onSkipBack={tts.skipBack}
         onSkipFwd={tts.skipFwd}
-        onStop={() => {
-          tts.stop();
-          setUserToggledBar(false);
-        }}
+        onStop={tts.stop}
         voices={tts.voices}
         voice={tts.voice}
         onVoiceChange={tts.setVoice}
@@ -706,10 +729,7 @@ export function ReaderView({ bookId }: { bookId: number }) {
         x={contextMenuPos?.x ?? 0}
         y={contextMenuPos?.y ?? 0}
         selection={contextMenuSelection}
-        onSpeak={(sel) => {
-          setUserToggledBar(true);
-          tts.start(sel);
-        }}
+        onSpeak={tts.start}
         onDismiss={dismissContextMenu}
       />
 
