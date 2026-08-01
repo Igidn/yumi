@@ -673,7 +673,7 @@ export function ReaderView({ bookId }: { bookId: number }) {
         >
           {tts.genError ? (
             <div className="pointer-events-none absolute left-1/2 top-3 z-10 -translate-x-1/2 text-[11px] text-reader-muted">
-              Generation Audio failed, try again.
+              Audio generation failed, try again.
             </div>
           ) : (
             tts.buffering && (
