@@ -30,6 +30,12 @@
  * the Apple Books reference: deep olive-brown paper, cream ink, blue accent
  * for headings.
  */
+.reader-dark svg,
+.reader-light svg {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
 .reader-dark {
   --reader-bg: #19160c;
   --reader-ink: #e8e3d8;
