@@ -18,13 +18,14 @@ export async function synthesizeEdgeSegment(
   const ratePct = Math.round((rate - 1) * 100);
   const rateStr = `${ratePct >= 0 ? "+" : ""}${ratePct}%`;
 
-  // Edge's readaloud WS occasionally closes before any audio arrives
-  // (NoAudioReceived) — transient, a fresh connection usually succeeds.
+  // Edge's readaloud WS occasionally fails — NoAudioReceived, DNS/TLS
+  // hiccups, connection resets. All transient: a fresh connection usually
+  // succeeds, so retry everything a few times.
   for (let attempt = 1; ; attempt++) {
     try {
       return await synthOnce(text, voice, rateStr);
     } catch (e) {
-      if (attempt >= 3 || !(e instanceof NoAudioReceived)) throw e;
+      if (attempt >= 3) throw e;
       await new Promise((r) => setTimeout(r, attempt * 500));
     }
   }

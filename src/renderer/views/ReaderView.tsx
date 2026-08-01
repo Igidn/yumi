@@ -31,6 +31,8 @@ import { useTts } from "../reader/useTts";
 
 /** px from top of viewport considered "hovering the header zone" */
 const HEADER_HOVER_ZONE = 80;
+/** TTS failure banner lingers this long after the user last touched the reader. */
+const TTS_ERROR_DISMISS_MS = 10_000;
 
 type Panel = "toc" | "search" | null;
 
@@ -244,6 +246,38 @@ export function ReaderView({ bookId }: { bookId: number }) {
     chapterPos === tts.ttsChapterPos &&
     pageInfo?.spread === ttsSpread &&
     !barHidden;
+
+  // TTS failure banner: any interaction with the reading surface (mouse
+  // move, click, wheel/scroll, page-turn keys) starts a 10s countdown.
+  const { genError, clearGenError } = tts;
+  const dismissTimerRef = useRef<number | null>(null);
+  const armErrorDismiss = useCallback(() => {
+    if (!genError) return;
+    if (dismissTimerRef.current) window.clearTimeout(dismissTimerRef.current);
+    dismissTimerRef.current = window.setTimeout(() => {
+      dismissTimerRef.current = null;
+      clearGenError();
+    }, TTS_ERROR_DISMISS_MS);
+  }, [genError, clearGenError]);
+
+  // Page-turn keys are window-level (PagedChapter); count them as reader
+  // interaction too, but not typing into panel inputs.
+  useEffect(() => {
+    if (!genError) return;
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA")) return;
+      armErrorDismiss();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      if (dismissTimerRef.current) {
+        window.clearTimeout(dismissTimerRef.current);
+        dismissTimerRef.current = null;
+      }
+    };
+  }, [genError, armErrorDismiss]);
 
   // Fragment target + nonce for scrolling after chapter mount (nonce forces re-fire).
   const [fragmentTarget, setFragmentTarget] = useState<{
@@ -633,11 +667,20 @@ export function ReaderView({ bookId }: { bookId: number }) {
             slideDir === 1 ? "slide-next" : slideDir === -1 ? "slide-prev" : ""
           }`}
           onAnimationEnd={() => setSlideDir(0)}
+          onMouseMove={armErrorDismiss}
+          onClick={armErrorDismiss}
+          onWheel={armErrorDismiss}
         >
-          {tts.buffering && (
+          {tts.genError ? (
             <div className="pointer-events-none absolute left-1/2 top-3 z-10 -translate-x-1/2 text-[11px] text-reader-muted">
-              Generating audio…
+              Generation Audio failed, try again.
             </div>
+          ) : (
+            tts.buffering && (
+              <div className="pointer-events-none absolute left-1/2 top-3 z-10 -translate-x-1/2 text-[11px] text-reader-muted">
+                Generating audio…
+              </div>
+            )
           )}
           <PagedChapter
             key={chapter.id}

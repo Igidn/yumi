@@ -100,6 +100,8 @@ export function useTts(
   const [speaking, setSpeaking] = useState(false);
   const [paused, setPaused] = useState(false);
   const [buffering, setBuffering] = useState(false);
+  /** True when segment synthesis failed after retries (edge backend). */
+  const [genError, setGenError] = useState(false);
   const [highlightBlockIndex, setHighlightBlockIndex] = useState<number | null>(
     null,
   );
@@ -168,6 +170,8 @@ export function useTts(
       highlightTimerRef.current = null;
     }
   }, []);
+
+  const clearGenError = useCallback(() => setGenError(false), []);
 
   const cacheGet = useCallback((key: string): TtsSpeakResult | undefined => {
     const hit = cacheRef.current.get(key);
@@ -300,6 +304,7 @@ export function useTts(
     setPaused(false);
     pausedRef.current = false;
     setHighlightBlockIndex(null);
+    setGenError(false);
   }, [stopHighlightLoop]);
 
   // Preload rule: keep segments up to LOOKAHEAD past the one currently
@@ -342,6 +347,7 @@ export function useTts(
             if (genRef.current !== gen) return;
             console.error("tts:speak failed", err);
             stop();
+            setGenError(true);
           });
       }
     };
@@ -360,6 +366,7 @@ export function useTts(
       currentSegRef.current = 0;
       setActive(true);
       setSpeaking(true);
+      setGenError(false);
       setPaused(false);
       pausedRef.current = false;
       // Tracking highlight appears instantly on the first spoken block;
@@ -551,6 +558,7 @@ export function useTts(
 
       synth.speak(utterance);
       setActive(true);
+      setGenError(false);
     },
     [],
   );
@@ -727,6 +735,8 @@ export function useTts(
     speaking,
     paused,
     buffering,
+    genError,
+    clearGenError,
     highlightBlockIndex,
     active,
     ttsChapterPos,
