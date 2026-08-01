@@ -20,20 +20,20 @@ interface BlockMapEntry {
   endChar: number;
 }
 
-/** One ~4-paragraph chunk sent to the TTS engine. */
+/** One ~3-paragraph chunk sent to the TTS engine. */
 interface TtsSegment {
   text: string;
   blockMap: BlockMapEntry[];
 }
 
 // Preload window: segments up to LOOKAHEAD past the one currently playing
-// are requested from main. ~4 paragraphs synth in ~1–2s vs ~10–15s of
+// are requested from main. ~3 paragraphs synth in ~1–2s vs ~10–15s of
 // playback, so the queue converges to 1–2 buffered segments.
 const LOOKAHEAD = 2;
-const SEG_PARAGRAPHS = 4;
-const SEG_MAX_CHARS = 800;
+const SEG_PARAGRAPHS = 3;
+const SEG_MAX_CHARS = 600;
 
-/** Split blocks into ~4-paragraph segments, skipping images and empty blocks. */
+/** Split blocks into ~3-paragraph segments, skipping images and empty blocks. */
 function segmentBlocks(
   blocks: ContentBlock[],
   startBlockIdx: number,
