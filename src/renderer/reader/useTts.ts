@@ -643,12 +643,15 @@ export function useTts(
     utteranceIdRef.current += 1;
     const nextPos = ttsChapterPosRef.current + 1;
     if (nextPos >= chaptersRef.current.length) {
-      setActive(false);
+      // Last chapter: full teardown. setActive(false) alone leaves the edge
+      // source playing — the hidden bar, the highlight, and the continueRef
+      // chain all keep running until the segment list exhausts.
+      stop();
       return;
     }
     advanceRef.current = true;
     setTtsChapterPos(nextPos);
-  }, []);
+  }, [stop]);
 
   // Keep highlightBlockRef in sync so voice/rate changes restart from the
   // current block instead of jumping back to the beginning.
