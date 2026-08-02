@@ -134,9 +134,7 @@ export function TtsBar({
         {voices.length > 0 && (
           <div ref={voiceRef} className="relative">
             <button
-              onClick={() =>
-                setMenu((m) => (m === "voice" ? null : "voice"))
-              }
+              onClick={() => setMenu((m) => (m === "voice" ? null : "voice"))}
               className={`flex max-w-[140px] items-center gap-1.5 rounded-full px-2 py-1 text-[11px] font-medium transition-colors ${
                 menu === "voice"
                   ? "bg-reader-edge/50 text-reader"
@@ -161,10 +159,7 @@ export function TtsBar({
                 role="listbox"
                 className="absolute bottom-full left-1/2 z-30 mb-2 max-h-64 w-56 -translate-x-1/2 overflow-y-auto rounded-xl border border-reader-edge bg-reader-chrome p-1 shadow-xl"
               >
-                <MenuItem
-                  active={voice === null}
-                  onClick={() => setMenu(null)}
-                >
+                <MenuItem active={voice === null} onClick={() => setMenu(null)}>
                   Default
                 </MenuItem>
                 {voices.map((v) => (
@@ -187,9 +182,7 @@ export function TtsBar({
         {/* Speed */}
         <div ref={speedRef} className="relative">
           <button
-            onClick={() =>
-              setMenu((m) => (m === "speed" ? null : "speed"))
-            }
+            onClick={() => setMenu((m) => (m === "speed" ? null : "speed"))}
             className={`flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-medium tabular-nums transition-colors ${
               menu === "speed"
                 ? "bg-reader-edge/50 text-reader"
@@ -265,9 +258,7 @@ export function TtsBar({
           className={`mx-0.5 flex h-7 w-7 items-center justify-center rounded-full bg-accent text-on-accent shadow-md transition-[filter,transform] hover:brightness-110 active:scale-95 ${
             buffering ? "animate-pulse" : ""
           }`}
-          aria-label={
-            buffering ? "Buffering…" : playing ? "Pause" : "Play"
-          }
+          aria-label={buffering ? "Buffering…" : playing ? "Pause" : "Play"}
         >
           {playing ? (
             <Pause size={12} strokeWidth={2.5} fill="currentColor" />
