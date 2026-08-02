@@ -69,6 +69,12 @@
 @utility bg-reader {
   background-color: var(--reader-bg);
 }
+@utility bg-reader-ink {
+  background-color: var(--reader-ink);
+}
+@utility text-reader-bg {
+  color: var(--reader-bg);
+}
 @utility bg-reader-chrome {
   background-color: var(--reader-chrome);
 }
@@ -205,6 +211,17 @@
 .reader-light .reader-tts-speaking {
   background: rgba(0 0 0 / 0.06);
   border-radius: 3px;
+}
+
+/* TTS equalizer bars — the control bar's live "speaking" indicator. */
+@keyframes reader-eq {
+  0%,
+  100% {
+    transform: scaleY(0.25);
+  }
+  50% {
+    transform: scaleY(1);
+  }
 }
 
 /* Flash-highlight for the block a search result jumped to. */
