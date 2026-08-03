@@ -112,7 +112,7 @@ export function TtsBar({
       }`}
     >
       <div className="flex items-center gap-0.5 text-[12px] text-reader-muted">
-        {/* Backend switcher (Kokoro lands later) */}
+        {/* Backend switcher */}
         <div className="mr-1 flex rounded-full bg-reader-edge/40 p-0.5 text-[9px] font-semibold uppercase tracking-[0.08em]">
           {BACKENDS.map((b) => (
             <button

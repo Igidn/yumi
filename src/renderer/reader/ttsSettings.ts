@@ -23,9 +23,7 @@ export async function loadTtsConfig(): Promise<TtsConfig> {
     const parsed = JSON.parse(raw) as Partial<TtsConfig>;
     return {
       backend:
-        parsed.backend === "edge" ||
-        parsed.backend === "kokoro" ||
-        parsed.backend === "web"
+        parsed.backend === "edge" || parsed.backend === "web"
           ? parsed.backend
           : DEFAULT_CONFIG.backend,
       rate:

@@ -141,7 +141,7 @@ export function useTts(
     backendRef.current = backend;
   }, [backend]);
 
-  // --- Segmented pipeline (edge/kokoro): preloader + AudioContext chaining ---
+  // --- Segmented pipeline: preloader + AudioContext chaining ---
   const genRef = useRef(0);
   const segmentsRef = useRef<TtsSegment[]>([]);
   const buffersRef = useRef<
@@ -358,7 +358,7 @@ export function useTts(
     };
   });
 
-  /** Start the segmented pipeline for a chapter (edge/kokoro). */
+  /** Start the segmented pipeline for a chapter. */
   const startEdge = useCallback(
     (blocks: ContentBlock[], startBlockIdx: number, startCharOff: number) => {
       genRef.current += 1;

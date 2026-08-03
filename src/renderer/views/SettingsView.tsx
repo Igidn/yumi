@@ -10,8 +10,8 @@ export function SettingsView() {
           <span className="text-[13px] text-muted">Web Speech API</span>
         </div>
         <p className="mt-2 text-[12px] text-muted">
-          Uses your system's built-in voice. Additional backends (Edge, Kokoro)
-          will be available in a future update.
+          Uses your system's built-in voice. Additional backends will be
+          available in a future update.
         </p>
       </div>
     </div>
