@@ -171,6 +171,9 @@ export function useTts(
     }
   }, []);
 
+  /** Position to restart from after a voice/provider switch parked playback. */
+  const pendingRestartRef = useRef<{ blockIdx: number; charOffset: number } | null>(null);
+
   /** Chapter ended: clear playback state, then auto-advance or stop. */
   const finishChapter = useCallback(() => {
     stopHighlightLoop();
@@ -292,6 +295,7 @@ export function useTts(
   const stop = useCallback(() => {
     continueRef.current = false;
     advanceRef.current = false;
+    pendingRestartRef.current = null;
     window.speechSynthesis.cancel();
     utteranceIdRef.current += 1;
     genRef.current += 1;
@@ -362,6 +366,7 @@ export function useTts(
   const startEdge = useCallback(
     (blocks: ContentBlock[], startBlockIdx: number, startCharOff: number) => {
       genRef.current += 1;
+      pendingRestartRef.current = null;
       stopHighlightLoop();
       sourceRef.current?.stop();
       sourceRef.current = null;
@@ -544,6 +549,7 @@ export function useTts(
   const startWeb = useCallback(
     (blocks: ContentBlock[], startBlockIdx: number, startCharOff: number) => {
       window.speechSynthesis.cancel();
+      pendingRestartRef.current = null;
       utteranceIdRef.current += 1;
       webSegmentsRef.current = segmentBlocks(
         blocks,
@@ -616,6 +622,20 @@ export function useTts(
   }, []);
 
   const resume = useCallback(() => {
+    // Playback was parked by a voice/provider switch: start it with the
+    // new config instead of resuming a dead provider.
+    const pending = pendingRestartRef.current;
+    if (pending) {
+      pendingRestartRef.current = null;
+      continueRef.current = true;
+      advanceRef.current = false;
+      const blocks =
+        chaptersRef.current[ttsChapterPosRef.current]?.blocks ?? [];
+      if (backendRef.current === "web")
+        startWeb(blocks, pending.blockIdx, pending.charOffset);
+      else startEdge(blocks, pending.blockIdx, pending.charOffset);
+      return;
+    }
     if (backendRef.current === "web") {
       window.speechSynthesis.resume();
     } else {
@@ -623,7 +643,7 @@ export function useTts(
       void audioCtxRef.current?.resume();
       setPaused(false);
     }
-  }, []);
+  }, [startWeb, startEdge]);
 
   const skipBack = useCallback(() => {
     continueRef.current = true;
@@ -677,22 +697,32 @@ export function useTts(
       setVoiceState(v);
       voiceRef.current = v;
       persistConfig();
-      if (continueRef.current) {
-        advanceRef.current = false;
-        const blockIdx = highlightBlockRef.current ?? 0;
-        const blocks =
-          chaptersRef.current[ttsChapterPosRef.current]?.blocks ?? [];
-        if (backendRef.current === "web") startWeb(blocks, blockIdx, 0);
-        else startEdge(blocks, blockIdx, 0);
+      if (continueRef.current || pendingRestartRef.current !== null) {
+        // Park playback paused at the current block; play resumes it with
+        // the new voice.
+        const blockIdx =
+          pendingRestartRef.current?.blockIdx ?? highlightBlockRef.current ?? 0;
+        stop();
+        pendingRestartRef.current = { blockIdx, charOffset: 0 };
+        setActive(true);
+        setSpeaking(false);
+        setPaused(true);
       }
     },
-    [startWeb, startEdge, persistConfig],
+    [stop, persistConfig],
   );
 
   const setBackend = useCallback(
     (b: TtsBackend) => {
       if (b === backendRef.current) return;
-      // Halt the current provider (Edge source / Web utterance) before switching.
+      // Keep the bar visible: halt the current provider and park playback
+      // paused at the current block; play resumes with the new backend.
+      // A parked pipeline (pendingRestartRef) counts as active — switching
+      // backends twice in a row must not drop the bar.
+      const wasActive =
+        continueRef.current || pendingRestartRef.current !== null;
+      const blockIdx =
+        pendingRestartRef.current?.blockIdx ?? highlightBlockRef.current ?? 0;
       stop();
       setBackendState(b);
       backendRef.current = b;
@@ -701,6 +731,12 @@ export function useTts(
       setVoiceState(null);
       voiceRef.current = null;
       persistConfig();
+      if (wasActive) {
+        pendingRestartRef.current = { blockIdx, charOffset: 0 };
+        setActive(true);
+        setSpeaking(false);
+        setPaused(true);
+      }
     },
     [stop, persistConfig],
   );
