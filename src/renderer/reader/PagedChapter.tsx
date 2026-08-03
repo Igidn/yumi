@@ -52,6 +52,8 @@ export interface SpreadInfo {
   contentHeight: number;
   colWidth: number;
   colGap: number;
+  /** First block index visible on the current spread, or null if unknown. */
+  firstVisibleBlockIndex: number | null;
 }
 
 /** Offscreen CSS-column count for one chapter under a known layout. */
@@ -189,6 +191,9 @@ export function PagedChapter({
   onOverflow,
   onLinkNavigate,
   fragmentTarget,
+  highlightBlockIndex,
+  onTtsSpreadChange,
+  onContextMenu,
 }: {
   chapter: ReaderChapter;
   fontSize: number;
@@ -203,6 +208,12 @@ export function PagedChapter({
   onLinkNavigate?: (chapterIndex: number, fragment: string | null) => void;
   /** Fragment ID + nonce to scroll to after geometry is measured (nonce forces re-fire). */
   fragmentTarget?: { fragment: string | null; nonce: number };
+  /** Block index currently spoken by TTS — gets the `reader-tts-speaking` class. */
+  highlightBlockIndex?: number | null;
+  /** Spread the TTS highlight currently sits on (null until first highlight). */
+  onTtsSpreadChange?: (spread: number) => void;
+  /** Right-click on reader content. */
+  onContextMenu?: (e: React.MouseEvent) => void;
 }) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -221,6 +232,13 @@ export function PagedChapter({
   const lastFragmentNonce = useRef(0);
 
   // Chapter switches remount via key={chapter.id} in ReaderView.
+
+  // Track the spread of the last TTS highlight so auto-turn only fires
+  // when the reader was actually on the TTS page.
+  const prevHighlightSpreadRef = useRef<number | null>(null);
+  // Debounce auto-turn so transient highlight glitches (unreliable
+  // onboundary charIndex on some platforms) don't trigger false turns.
+  const autoTurnTimerRef = useRef<number | null>(null);
 
   const measure = useCallback(() => {
     const viewport = viewportRef.current;
@@ -304,6 +322,29 @@ export function PagedChapter({
     if (!geom) return;
     const fraction = geom.spreads <= 1 ? 1 : spread / (geom.spreads - 1);
     fractionRef.current = fraction;
+
+    // Find the first visible block on the current spread.
+    let firstVisibleBlockIndex: number | null = null;
+    const content = contentRef.current;
+    if (content) {
+      const clipEl = content.parentElement;
+      if (clipEl) {
+        const cr = clipEl.getBoundingClientRect();
+        for (const el of content.querySelectorAll<HTMLElement>("[data-b]")) {
+          const r = el.getBoundingClientRect();
+          if (
+            r.bottom > cr.top &&
+            r.top < cr.bottom &&
+            r.right > cr.left &&
+            r.left < cr.right
+          ) {
+            firstVisibleBlockIndex = parseInt(el.getAttribute("data-b")!, 10);
+            break;
+          }
+        }
+      }
+    }
+
     onSpreadChange({
       spread,
       spreads: geom.spreads,
@@ -314,6 +355,7 @@ export function PagedChapter({
       contentHeight: geom.contentHeight,
       colWidth: geom.colWidth,
       colGap: geom.colGap,
+      firstVisibleBlockIndex,
     });
   }, [spread, geom]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -345,6 +387,56 @@ export function PagedChapter({
     const timer = setTimeout(() => el.classList.remove("reader-flash"), 10000);
     return () => clearTimeout(timer);
   }, [jump, geom]);
+
+  // Auto-turn: when TTS highlight moves to a block on a different spread,
+  // turn the page — but only if the reader was already on the previous TTS spread.
+  // Debounced (250ms) so transient highlight glitches (e.g. onboundary charIndex
+  // reporting sentence-relative offsets on some platforms) don't trigger false turns.
+  useEffect(() => {
+    if (highlightBlockIndex == null || !geom) return;
+    const content = contentRef.current;
+    if (!content) return;
+    const el = content.querySelector<HTMLElement>(
+      `[data-b="${highlightBlockIndex}"]`,
+    );
+    if (!el) return;
+    const contentRect = content.getBoundingClientRect();
+    const elRect = el.getBoundingClientRect();
+    const xOffset = elRect.left - contentRect.left;
+    const targetSpread = Math.floor(xOffset / (geom.stride * geom.perSpread));
+    onTtsSpreadChange?.(targetSpread);
+
+    const prevSpread = prevHighlightSpreadRef.current;
+    prevHighlightSpreadRef.current = targetSpread;
+
+    if (targetSpread === spread || spread !== prevSpread) {
+      // No turn needed, or reader manually paged away — clear any pending timer.
+      if (autoTurnTimerRef.current !== null) {
+        window.clearTimeout(autoTurnTimerRef.current);
+        autoTurnTimerRef.current = null;
+      }
+      return;
+    }
+
+    // Debounce: only turn after the highlight has been on the target spread
+    // for 250ms without interruption. A glitch that reverts within the window
+    // is cancelled by the next effect run.
+    if (autoTurnTimerRef.current !== null) {
+      window.clearTimeout(autoTurnTimerRef.current);
+    }
+    autoTurnTimerRef.current = window.setTimeout(() => {
+      autoTurnTimerRef.current = null;
+      setAnimate(true);
+      setSpread(Math.min(Math.max(0, targetSpread), geom.spreads - 1));
+    }, 250);
+
+    return () => {
+      if (autoTurnTimerRef.current !== null) {
+        window.clearTimeout(autoTurnTimerRef.current);
+        autoTurnTimerRef.current = null;
+      }
+    };
+  }, [highlightBlockIndex, geom, spread, onTtsSpreadChange]);
 
   // Fragment-based scroll: find the element with the matching id and scroll to its spread.
   useEffect(() => {
@@ -463,6 +555,7 @@ export function PagedChapter({
             ref={contentRef}
             lang="en"
             onClick={handleContentClick}
+            onContextMenu={onContextMenu}
             className={`reader-content text-reader${animate ? " transition-transform duration-200 ease-out" : ""}`}
             style={{
               width: geom ? geom.contentWidth : "100%",
@@ -502,6 +595,8 @@ export function PagedChapter({
               ) : (
                 block.text
               );
+              const ttsClass =
+                highlightBlockIndex === i ? "reader-tts-speaking" : "";
               if (block.type === "heading") {
                 const level = Math.min(6, Math.max(1, block.level ?? 1));
                 const Tag = `h${level}` as "h1";
@@ -510,7 +605,7 @@ export function PagedChapter({
                     key={i}
                     id={block.fragment || undefined}
                     data-b={i}
-                    className={headingClass(level, i === 0)}
+                    className={`${headingClass(level, i === 0)} ${ttsClass}`}
                   >
                     {body}
                   </Tag>
@@ -525,7 +620,7 @@ export function PagedChapter({
                   key={i}
                   id={block.fragment || undefined}
                   data-b={i}
-                  className={indent ? "reader-indent" : undefined}
+                  className={`${indent ? "reader-indent" : ""} ${ttsClass}`}
                 >
                   {body}
                 </p>

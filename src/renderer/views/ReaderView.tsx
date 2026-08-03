@@ -1,4 +1,4 @@
-import { List, Pen, Search, Undo2 } from "lucide-react";
+import { List, Pen, Search, Undo2, Volume2 } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -7,8 +7,9 @@ import {
   useState,
 } from "react";
 
-import type { ReaderPayload } from "../../shared/types";
+import type { ReaderPayload, TtsSelection } from "../../shared/types";
 import { AppearanceMenu } from "../reader/AppearanceMenu";
+import { ContextMenu, getTtsSelection } from "../reader/ContextMenu";
 import { FloatingPanel } from "../reader/FloatingPanel";
 import {
   countChapterCols,
@@ -25,9 +26,13 @@ import {
   saveReaderSettings,
 } from "../reader/settings";
 import { TocPanel } from "../reader/TocPanel";
+import { TtsBar } from "../reader/TtsBar";
+import { useTts } from "../reader/useTts";
 
 /** px from top of viewport considered "hovering the header zone" */
 const HEADER_HOVER_ZONE = 80;
+/** TTS failure banner lingers this long after the user last touched the reader. */
+const TTS_ERROR_DISMISS_MS = 10_000;
 
 type Panel = "toc" | "search" | null;
 
@@ -64,6 +69,12 @@ export function ReaderView({ bookId }: { bookId: number }) {
   const [panel, setPanel] = useState<Panel>(null);
   const [appearanceOpen, setAppearanceOpen] = useState(false);
   const [drawingOpen, setDrawingOpen] = useState(false);
+  const [contextMenuPos, setContextMenuPos] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
+  const [contextMenuSelection, setContextMenuSelection] =
+    useState<TtsSelection | null>(null);
   const [jump, setJump] = useState<PageJump | null>(null);
   const [reposition, setReposition] = useState<Reposition | null>(null);
   /** Slide direction for chapter-switch animation: -1 prev, 1 next, 0 none. */
@@ -79,9 +90,17 @@ export function ReaderView({ bookId }: { bookId: number }) {
   const hideTimer = useRef<number | null>(null);
   // macOS native fullscreen: traffic lights vanish, move content left.
   const [isFullScreen, setIsFullScreen] = useState(false);
+  /** Spread the TTS highlight sits on; reported by PagedChapter's auto-turn. */
+  const [ttsSpread, setTtsSpread] = useState<number | null>(null);
+  /** User manually hid the bar while listening (toggles via the header button). */
+  const [barHidden, setBarHidden] = useState(false);
   const isMac = window.yumi.platform === "darwin";
 
   const nonceRef = useRef(1);
+  const readerChapterPosRef = useRef(chapterPos);
+  useEffect(() => {
+    readerChapterPosRef.current = chapterPos;
+  }, [chapterPos]);
   const payloadRef = useRef<ReaderPayload | null>(null);
   // Latest position for progress writes; chapterId 0 = nothing to save yet.
   const progressRef = useRef({ chapterPos: 0, chapterId: 0, fraction: 0 });
@@ -147,6 +166,21 @@ export function ReaderView({ bookId }: { bookId: number }) {
     };
   }, [flushProgress]);
 
+  // Context menu: right-click on reader content → show "Speak" if text selected.
+  const handleContextMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    const sel = getTtsSelection();
+    if (sel) {
+      setContextMenuPos({ x: e.clientX, y: e.clientY });
+      setContextMenuSelection(sel);
+    }
+  }, []);
+
+  const dismissContextMenu = useCallback(() => {
+    setContextMenuPos(null);
+    setContextMenuSelection(null);
+  }, []);
+
   // Reading-time heartbeat for the library goal/streak panel. Ticks only
   // while this window is visible and focused, so an idle-open book never
   // inflates the daily count.
@@ -188,6 +222,62 @@ export function ReaderView({ bookId }: { bookId: number }) {
     },
     [chapterPos, goToChapter],
   );
+
+  // TTS: independent playback position, decoupled from reader chapter.
+  const tts = useTts(payload?.chapters ?? [], readerChapterPosRef);
+
+  // Auto-advance reader chapter when TTS advances (only if reader was on the same chapter).
+  const prevTtsChapterPosRef = useRef(tts.ttsChapterPos);
+  useEffect(() => {
+    const prev = prevTtsChapterPosRef.current;
+    if (tts.ttsChapterPos !== prev) {
+      prevTtsChapterPosRef.current = tts.ttsChapterPos;
+      if (chapterPos === prev) {
+        goToChapter(tts.ttsChapterPos, 0);
+      }
+    }
+  }, [tts.ttsChapterPos, chapterPos, goToChapter]);
+
+  // TTS bar appears only while TTS is reading and the user is on the spread
+  // it reads from — not on other spreads, chapters, or when TTS is idle.
+  // The user can hide it manually (barHidden) and toggle it back.
+  const ttsBarVisible =
+    tts.active &&
+    chapterPos === tts.ttsChapterPos &&
+    pageInfo?.spread === ttsSpread &&
+    !barHidden;
+
+  // TTS failure banner: any interaction with the reading surface (mouse
+  // move, click, wheel/scroll, page-turn keys) starts a 10s countdown.
+  const { genError, clearGenError } = tts;
+  const dismissTimerRef = useRef<number | null>(null);
+  const armErrorDismiss = useCallback(() => {
+    if (!genError) return;
+    if (dismissTimerRef.current) window.clearTimeout(dismissTimerRef.current);
+    dismissTimerRef.current = window.setTimeout(() => {
+      dismissTimerRef.current = null;
+      clearGenError();
+    }, TTS_ERROR_DISMISS_MS);
+  }, [genError, clearGenError]);
+
+  // Page-turn keys are window-level (PagedChapter); count them as reader
+  // interaction too, but not typing into panel inputs.
+  useEffect(() => {
+    if (!genError) return;
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA")) return;
+      armErrorDismiss();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      if (dismissTimerRef.current) {
+        window.clearTimeout(dismissTimerRef.current);
+        dismissTimerRef.current = null;
+      }
+    };
+  }, [genError, armErrorDismiss]);
 
   // Fragment target + nonce for scrolling after chapter mount (nonce forces re-fire).
   const [fragmentTarget, setFragmentTarget] = useState<{
@@ -435,7 +525,7 @@ export function ReaderView({ bookId }: { bookId: number }) {
 
   return (
     <div
-      className={`reader-${theme} flex h-screen flex-col overflow-hidden bg-reader font-ui text-reader`}
+      className={`reader-${theme} relative flex h-screen flex-col overflow-hidden bg-reader font-ui text-reader`}
       onMouseMove={handleHeaderMouseMove}
     >
       {/* Chrome header — drag region for the frameless window.
@@ -502,6 +592,58 @@ export function ReaderView({ bookId }: { bookId: number }) {
           </button>
           <button
             onClick={() => {
+              if (tts.active) {
+                if (
+                  chapterPos === tts.ttsChapterPos &&
+                  pageInfo?.spread === ttsSpread
+                ) {
+                  // On the reading position: toggle the bar.
+                  setBarHidden((v) => !v);
+                } else {
+                  // Jump to the read-aloud position; the bar appears on arrival.
+                  setBarHidden(false);
+                  goToChapter(tts.ttsChapterPos, 0);
+                  setJump({
+                    blockIndex: tts.highlightBlockIndex ?? 0,
+                    nonce: nonceRef.current++,
+                  });
+                }
+              } else {
+                // Idle: start reading from the current spread.
+                setBarHidden(false);
+                tts.start({
+                  blockIndex: pageInfo?.firstVisibleBlockIndex ?? 0,
+                  charOffset: 0,
+                });
+              }
+            }}
+            className={`rounded-[6px] p-1.5 transition-colors ${
+              ttsBarVisible ||
+              (tts.active &&
+                !(
+                  chapterPos === tts.ttsChapterPos &&
+                  pageInfo?.spread === ttsSpread
+                ))
+                ? "text-reader"
+                : "text-reader-muted hover:text-reader"
+            }`}
+            aria-label={
+              tts.active &&
+              !(
+                chapterPos === tts.ttsChapterPos &&
+                pageInfo?.spread === ttsSpread
+              )
+                ? "Jump to read-aloud position"
+                : ttsBarVisible
+                  ? "Hide read-aloud controls"
+                  : "Show read-aloud controls"
+            }
+            aria-pressed={ttsBarVisible}
+          >
+            <Volume2 size={17} strokeWidth={1.75} />
+          </button>
+          <button
+            onClick={() => {
               setAppearanceOpen(false);
               setPanel((p) => (p === "search" ? null : "search"));
             }}
@@ -525,7 +667,21 @@ export function ReaderView({ bookId }: { bookId: number }) {
             slideDir === 1 ? "slide-next" : slideDir === -1 ? "slide-prev" : ""
           }`}
           onAnimationEnd={() => setSlideDir(0)}
+          onMouseMove={armErrorDismiss}
+          onClick={armErrorDismiss}
+          onWheel={armErrorDismiss}
         >
+          {tts.genError ? (
+            <div className="pointer-events-none absolute left-1/2 top-3 z-10 -translate-x-1/2 text-[11px] text-reader-muted">
+              Audio generation failed, try again.
+            </div>
+          ) : (
+            tts.buffering && (
+              <div className="pointer-events-none absolute left-1/2 top-3 z-10 -translate-x-1/2 text-[11px] text-reader-muted">
+                Generating audio…
+              </div>
+            )
+          )}
           <PagedChapter
             key={chapter.id}
             chapter={chapter}
@@ -535,9 +691,14 @@ export function ReaderView({ bookId }: { bookId: number }) {
             jump={jump}
             reposition={reposition}
             fragmentTarget={fragmentTarget}
+            highlightBlockIndex={
+              chapterPos === tts.ttsChapterPos ? tts.highlightBlockIndex : null
+            }
+            onTtsSpreadChange={setTtsSpread}
             onSpreadChange={handleSpreadChange}
             onOverflow={handleOverflow}
             onLinkNavigate={handleLinkNavigate}
+            onContextMenu={handleContextMenu}
           />
         </div>
       ) : (
@@ -584,6 +745,41 @@ export function ReaderView({ bookId }: { bookId: number }) {
           )}
         </div>
       </footer>
+
+      {/* TTS control bar */}
+      <TtsBar
+        backend={tts.backend}
+        onBackendChange={tts.setBackend}
+        rate={tts.rate}
+        onRateChange={tts.setRate}
+        speaking={tts.speaking}
+        paused={tts.paused}
+        buffering={tts.buffering}
+        onPlayPause={() => {
+          if (tts.paused) {
+            tts.resume();
+          } else if (tts.speaking) {
+            tts.pause();
+          }
+        }}
+        onSkipBack={tts.skipBack}
+        onSkipFwd={tts.skipFwd}
+        onStop={tts.stop}
+        voices={tts.voices}
+        voice={tts.voice}
+        onVoiceChange={tts.setVoice}
+        visible={ttsBarVisible}
+      />
+
+      {/* Context menu */}
+      <ContextMenu
+        visible={contextMenuPos !== null}
+        x={contextMenuPos?.x ?? 0}
+        y={contextMenuPos?.y ?? 0}
+        selection={contextMenuSelection}
+        onSpeak={tts.start}
+        onDismiss={dismissContextMenu}
+      />
 
       {/* Panels */}
       {panel === "toc" && (

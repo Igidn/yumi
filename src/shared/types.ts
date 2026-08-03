@@ -2,6 +2,36 @@ export type Platform = "darwin" | "win32" | "linux";
 
 export type BookFormat = "epub";
 
+export type TtsBackend = "edge" | "web";
+
+export interface TtsVoice {
+  name: string;
+  lang: string;
+  id: string;
+}
+
+export interface TtsSelection {
+  blockIndex: number;
+  charOffset: number;
+}
+
+/** One word spoken in a synthesized segment, timed against that segment's audio. */
+export interface WordBoundary {
+  /** Seconds from the segment audio start. */
+  time: number;
+  /** Seconds. */
+  duration: number;
+  /** Word text; used for debug/alignment only. */
+  text: string;
+}
+
+/** Result of synthesizing one TTS segment. */
+export interface TtsSpeakResult {
+  audioBase64: string;
+  mimeType: string;
+  words: WordBoundary[];
+}
+
 export interface Book {
   id: number;
   title: string;
@@ -126,7 +156,10 @@ export type IPCChannel =
   | "drawing:create-tab"
   | "drawing:rename-tab"
   | "drawing:delete-tab"
-  | "drawing:clear-tab";
+  | "drawing:clear-tab"
+  | "tts:speak"
+  | "tts:stop"
+  | "tts:voices";
 
 /** Result of an `import:book` call (SPEC §1 duplicate handling). */
 export type ImportOutcome =
@@ -185,6 +218,9 @@ export interface IPCPayloads {
   "drawing:rename-tab": { tabId: string; label: string };
   "drawing:delete-tab": { tabId: string };
   "drawing:clear-tab": { tabId: string };
+  "tts:speak": { text: string; voice: string | null; rate: number };
+  "tts:stop": void;
+  "tts:voices": void;
 }
 
 export interface IPCResponses {
@@ -212,6 +248,9 @@ export interface IPCResponses {
   "drawing:rename-tab": void;
   "drawing:delete-tab": void;
   "drawing:clear-tab": void;
+  "tts:speak": TtsSpeakResult;
+  "tts:stop": void;
+  "tts:voices": TtsVoice[];
 }
 
 export interface YumiAPI {

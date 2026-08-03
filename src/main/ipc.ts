@@ -17,6 +17,7 @@ import { getCoversDir } from "./paths";
 import { loadReaderBook, saveReaderProgress } from "./reader";
 import { getReadingStats, logReadingSeconds } from "./reading";
 import { getStore } from "./store";
+import { registerTtsHandlers } from "./tts";
 import { closeReaderWindow, openReaderWindow } from "./windows";
 
 type Handler<C extends IPCChannel> = (
@@ -46,6 +47,7 @@ export function broadcastEvent(event: YumiEvent): void {
 
 export function registerIpcHandlers(): void {
   registerDrawingIpcHandlers();
+  registerTtsHandlers();
 
   handle("settings:get", async (_, payload) => {
     const db = await getDb();

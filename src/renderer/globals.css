@@ -30,6 +30,12 @@
  * the Apple Books reference: deep olive-brown paper, cream ink, blue accent
  * for headings.
  */
+.reader-dark svg,
+.reader-light svg {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
 .reader-dark {
   --reader-bg: #19160c;
   --reader-ink: #e8e3d8;
@@ -62,6 +68,12 @@
 
 @utility bg-reader {
   background-color: var(--reader-bg);
+}
+@utility bg-reader-ink {
+  background-color: var(--reader-ink);
+}
+@utility text-reader-bg {
+  color: var(--reader-bg);
 }
 @utility bg-reader-chrome {
   background-color: var(--reader-chrome);
@@ -185,6 +197,31 @@
 
 .reader-content a:hover {
   text-decoration: underline;
+}
+
+/* TTS speaking highlight — per-theme subtle background on the active block. */
+.reader-dark .reader-tts-speaking {
+  background: rgba(255 255 255 / 0.08);
+  border-radius: 3px;
+}
+.reader-sepia .reader-tts-speaking {
+  background: rgba(180 140 80 / 0.15);
+  border-radius: 3px;
+}
+.reader-light .reader-tts-speaking {
+  background: rgba(0 0 0 / 0.06);
+  border-radius: 3px;
+}
+
+/* TTS equalizer bars — the control bar's live "speaking" indicator. */
+@keyframes reader-eq {
+  0%,
+  100% {
+    transform: scaleY(0.25);
+  }
+  50% {
+    transform: scaleY(1);
+  }
 }
 
 /* Flash-highlight for the block a search result jumped to. */
