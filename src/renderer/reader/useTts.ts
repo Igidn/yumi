@@ -172,7 +172,10 @@ export function useTts(
   }, []);
 
   /** Position to restart from after a voice/provider switch parked playback. */
-  const pendingRestartRef = useRef<{ blockIdx: number; charOffset: number } | null>(null);
+  const pendingRestartRef = useRef<{
+    blockIdx: number;
+    charOffset: number;
+  } | null>(null);
 
   /** Chapter ended: clear playback state, then auto-advance or stop. */
   const finishChapter = useCallback(() => {
