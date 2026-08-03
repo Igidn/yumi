@@ -1,7 +1,7 @@
 <h1 align="center">Yumi</h1>
 
 <p align="center">
-  An open-source (MIT) ebook reader with an Apple Books-inspired reading experience.
+  An open-source ebook reader.
 </p>
 
 <p align="center">
