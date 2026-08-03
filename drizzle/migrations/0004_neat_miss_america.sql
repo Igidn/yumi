@@ -1,0 +1,1 @@
+ALTER TABLE `books` ADD `last_chapter_id` integer;

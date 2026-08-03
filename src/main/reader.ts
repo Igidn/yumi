@@ -144,16 +144,22 @@ export async function loadReaderBook(bookId: number): Promise<ReaderPayload> {
     });
   }
 
-  // books.progress is the whole-book fraction written by saveReaderProgress:
-  // (chapterPos + chapterFraction) / chapterCount, so floor(progress * count)
-  // recovers the chapter the reader was on.
-  const resumeChapterPos =
-    readerChapters.length === 0
-      ? 0
-      : Math.min(
-          Math.floor(book.progress * readerChapters.length),
-          readerChapters.length - 1,
-        );
+  // Resume: find the chapter matching the stored lastChapterId.
+  // Fall back to scalar progress when lastChapterId is missing (legacy data).
+  const resumeChapterPos = (() => {
+    if (readerChapters.length === 0) return 0;
+    if (book.lastChapterId != null) {
+      const idx = readerChapters.findIndex(
+        (ch) => ch.id === book.lastChapterId,
+      );
+      if (idx >= 0) return idx;
+    }
+    // Legacy: scalar progress fallback.
+    return Math.min(
+      Math.floor(book.progress * readerChapters.length),
+      readerChapters.length - 1,
+    );
+  })();
 
   return {
     book: bookForRenderer(book),
@@ -179,7 +185,7 @@ export async function saveReaderProgress(payload: {
       .where(eq(chapters.id, payload.chapterId));
     await db
       .update(books)
-      .set({ progress: bookProgress })
+      .set({ progress: bookProgress, lastChapterId: payload.chapterId })
       .where(eq(books.id, payload.bookId));
     if (bookProgress >= 1) {
       // Stamp the finish date once per finish cycle; "still reading" clears

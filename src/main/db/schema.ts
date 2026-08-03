@@ -17,6 +17,9 @@ export const books = sqliteTable("books", {
   // First time progress reached 1; cleared by "still reading". Drives the
   // "books read this year" shelf.
   finishedAt: text("finished_at"),
+  // ID of the chapter the reader was last on; used for accurate resume
+  // instead of deriving from a lossy scalar progress.
+  lastChapterId: integer("last_chapter_id"),
   collection: text("collection").notNull().default(""),
   trashed: integer("trashed").notNull().default(0), // boolean
 });

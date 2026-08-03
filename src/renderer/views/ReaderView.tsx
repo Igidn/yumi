@@ -105,6 +105,9 @@ export function ReaderView({ bookId }: { bookId: number }) {
   // Latest position for progress writes; chapterId 0 = nothing to save yet.
   const progressRef = useRef({ chapterPos: 0, chapterId: 0, fraction: 0 });
   const saveTimer = useRef<number | null>(null);
+  // Mirror colsByChapter state so flushProgress can read it without a
+  // stale closure (colsByChapter is set asynchronously after layout).
+  const colsByChapterRef = useRef<number[] | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -137,7 +140,23 @@ export function ReaderView({ bookId }: { bookId: number }) {
     const data = payloadRef.current;
     const p = progressRef.current;
     if (!data || p.chapterId === 0 || data.chapters.length === 0) return;
-    const bookProgress = (p.chapterPos + p.fraction) / data.chapters.length;
+    const cols = colsByChapterRef.current;
+    // Weight each chapter by its actual page count instead of treating
+    // every chapter as equal length. Falls back to equal weighting before
+    // the first layout measurement completes (brief, on first paint).
+    let bookProgress: number;
+    if (cols && cols.length === data.chapters.length) {
+      let colsBefore = 0;
+      for (let i = 0; i < p.chapterPos; i++) colsBefore += cols[i] ?? 0;
+      const currentCols = cols[p.chapterPos] ?? 1;
+      const totalCols = cols.reduce((a, b) => a + (b ?? 0), 0);
+      bookProgress =
+        totalCols > 0 ? (colsBefore + p.fraction * currentCols) / totalCols : 0;
+    } else {
+      // ponytail: equal-weight fallback — replaced by column counts once
+      // the first page layout finishes (~100ms after chapter mount).
+      bookProgress = (p.chapterPos + p.fraction) / data.chapters.length;
+    }
     void window.yumi.invoke("reader:progress", {
       bookId: data.book.id,
       chapterId: p.chapterId,
@@ -482,6 +501,7 @@ export function ReaderView({ bookId }: { bookId: number }) {
     }
     // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing state from an offscreen DOM measure, an external system React can't model.
     setColsByChapter(cols);
+    colsByChapterRef.current = cols;
     // eslint-disable-next-line react-hooks/exhaustive-deps -- layoutKey encodes pageInfo dims + typography.
   }, [payload, layoutKey]);
 
