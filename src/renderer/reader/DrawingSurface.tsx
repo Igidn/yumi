@@ -129,8 +129,24 @@ function debounce<A extends unknown[]>(
  * main process broadcasts it to other windows, which apply it via
  * updateScene without remounting.
  */
-export function DrawingSurface({ tabId }: { tabId: string }) {
+export function DrawingSurface({
+  tabId,
+  position,
+}: {
+  tabId: string;
+  /**
+   * Panel viewport rect. Excalidraw caches its DOM offset for pointer→canvas
+   * mapping and only refreshes it on resize/scroll — moving the fixed panel
+   * (pure left/top change) fires neither, desyncing the pen. Refreshing here
+   * keeps the cached offset in sync with the panel's position.
+   */
+  position: { x: number; y: number; width: number; height: number };
+}) {
   const apiRef = useRef<ExcalidrawImperativeAPI | null>(null);
+
+  useEffect(() => {
+    apiRef.current?.refresh();
+  }, [position.x, position.y, position.width, position.height]);
   /**
    * Fingerprint of the last scene this window persisted or applied. onChange
    * fires for our own updateScene calls too — without this guard, two open

@@ -495,6 +495,7 @@ export function FloatingPanel({ isOpen, onClose }: FloatingPanelProps) {
           <DrawingSurface
             key={`${activeTabId}:${canvasNonce}`}
             tabId={activeTabId}
+            position={rect}
           />
         )}
 
