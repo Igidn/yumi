@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/icon-source.png" alt="Yumi" width="96">
+</p>
+
 <h1 align="center">Yumi</h1>
 
 <p align="center">
