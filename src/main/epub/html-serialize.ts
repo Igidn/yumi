@@ -44,7 +44,7 @@ export function inlineHtml(
       const style = (el.getAttribute("style") || "").toLowerCase();
       const cls = (el.getAttribute("class") || "").toLowerCase();
       const inner = inlineHtml(el, linkResolver);
-      if (!inner.trim()) return out;
+      if (!inner.trim()) continue;
       if (/font-style\s*:\s*italic/.test(style) || cls.includes("italic")) {
         out += `<em${idAttr}>${inner}</em>`;
       } else if (/font-weight\s*:\s*bold/.test(style) || cls.includes("bold")) {
