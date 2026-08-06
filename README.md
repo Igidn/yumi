@@ -15,14 +15,7 @@
 </p>
 
 ---
-
-## Video
-
-<!-- Add a demo video (YouTube embed, GIF, or MP4 link) -->
-
-## Screenshots
-
-<!-- Add screenshots: library, reader, search, drawing panel -->
+//
 
 ---
 
