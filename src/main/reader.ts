@@ -13,6 +13,19 @@ import { bookForRenderer, coverUrlForRenderer } from "./import";
 /** Per-book parse lock so two concurrent reader:load calls don't both insert. */
 const parseLocks = new Map<number, ReturnType<typeof doParseEpub>>();
 
+/** doParseEpub under the per-book lock, shared by first-parse and self-heal. */
+function parseWithLock(
+  bookId: number,
+  sourcePath: string,
+  scrollByTitle?: Map<string, number>,
+) {
+  const inflight = parseLocks.get(bookId);
+  if (inflight) return inflight;
+  const promise = doParseEpub(bookId, sourcePath, scrollByTitle);
+  parseLocks.set(bookId, promise);
+  return promise.finally(() => parseLocks.delete(bookId));
+}
+
 function blocksFromRaw(rawText: string): ContentBlock[] {
   try {
     const parsed = JSON.parse(rawText);
@@ -53,12 +66,16 @@ async function doParseEpub(
  * table on first open. Chapters are cached in SQLite from then on, so the
  * zip walk happens exactly once per book (M1 stores blocks in rawText).
  *
- * Self-heal: if a cached book has consecutive chapters with identical
- * titles, the chapter list is suspect — re-parse once and re-attach each
- * chapter's scrollPosition by title (taking the max across the duplicates)
- * so the reader's in-chapter position survives the migration. Per-chapter
- * ids change — annotations/notes/drawings on those old chapter rows are
- * dropped by the cascade; their data was already on the wrong chapter.
+ * Self-heal: if a cached book has every chapter twice (the old
+ * spine-based parser inserted two identical batches), re-parse once and
+ * re-attach each chapter's scrollPosition by title (taking the max across
+ * the duplicates) so the reader's in-chapter position survives the
+ * migration. Per-chapter ids change — annotations/notes/drawings on those
+ * old chapter rows are dropped by the cascade; their data was already on
+ * the wrong chapter. The check is the full 2x signature, not any
+ * consecutive duplicate title: GEB's own TOC lists "CHAPTER VIII" twice,
+ * and re-parsing on that would churn chapter ids on every open, making
+ * lastChapterId stale and resume always fall back to scalar progress.
  */
 async function ensureChapters(
   bookId: number,
@@ -73,9 +90,13 @@ async function ensureChapters(
     .orderBy(asc(chapters.index));
 
   if (existing.length > 0) {
-    const looksBuggy = existing.some(
-      (c, i) => i > 0 && c.title === existing[i - 1].title,
-    );
+    // True duplication signature: even count, every adjacent pair equal
+    // (rows come interleaved: batch1[0], batch2[0], batch1[1], batch2[1]…).
+    const looksBuggy =
+      existing.length % 2 === 0 &&
+      existing.every(
+        (c, i) => i % 2 === 0 || c.title === existing[i - 1].title,
+      );
     if (!looksBuggy || format !== "epub") return existing;
 
     // Self-heal: delete duplicates and re-parse once.
@@ -87,7 +108,7 @@ async function ensureChapters(
     }
     try {
       await db.delete(chapters).where(eq(chapters.bookId, bookId));
-      return doParseEpub(bookId, sourcePath, scrollByTitle);
+      return parseWithLock(bookId, sourcePath, scrollByTitle);
     } catch (err) {
       console.error("[reader] self-heal parse failed:", err);
       return existing;
@@ -95,18 +116,7 @@ async function ensureChapters(
   }
 
   if (format !== "epub") return existing;
-
-  // ponytail: per-book lock prevents duplicate inserts when two reader
-  // windows open the same uncached book before the first parse finishes.
-  const inflight = parseLocks.get(bookId);
-  if (inflight) return inflight;
-  const promise = doParseEpub(bookId, sourcePath);
-  parseLocks.set(bookId, promise);
-  try {
-    return await promise;
-  } finally {
-    parseLocks.delete(bookId);
-  }
+  return parseWithLock(bookId, sourcePath);
 }
 
 /**
