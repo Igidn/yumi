@@ -3,7 +3,8 @@ import type { TtsBackend } from "../../shared/types";
 export interface TtsConfig {
   backend: TtsBackend;
   rate: number;
-  voiceId: string | null;
+  /** Voice selection per backend; backend voice lists are disjoint. */
+  voiceIds: Record<TtsBackend, string | null>;
 }
 
 const TTS_CONFIG_KEY = "tts:config";
@@ -11,7 +12,7 @@ const TTS_CONFIG_KEY = "tts:config";
 const DEFAULT_CONFIG: TtsConfig = {
   backend: "web",
   rate: 1,
-  voiceId: null,
+  voiceIds: { web: null, edge: null },
 };
 
 export async function loadTtsConfig(): Promise<TtsConfig> {
@@ -20,7 +21,23 @@ export async function loadTtsConfig(): Promise<TtsConfig> {
       key: TTS_CONFIG_KEY,
     });
     if (!raw) return { ...DEFAULT_CONFIG };
-    const parsed = JSON.parse(raw) as Partial<TtsConfig>;
+    const parsed = JSON.parse(raw) as Partial<TtsConfig> & {
+      // Pre-per-backend configs stored a single voiceId for the active backend.
+      voiceId?: unknown;
+    };
+    const stored: Partial<Record<TtsBackend, unknown>> =
+      parsed.voiceIds ?? {};
+    const voiceIds: Record<TtsBackend, string | null> = {
+      edge: typeof stored.edge === "string" ? stored.edge : null,
+      web: typeof stored.web === "string" ? stored.web : null,
+    };
+    if (typeof parsed.voiceId === "string") {
+      const backend =
+        parsed.backend === "edge" || parsed.backend === "web"
+          ? parsed.backend
+          : DEFAULT_CONFIG.backend;
+      if (!voiceIds[backend]) voiceIds[backend] = parsed.voiceId;
+    }
     return {
       backend:
         parsed.backend === "edge" || parsed.backend === "web"
@@ -32,10 +49,7 @@ export async function loadTtsConfig(): Promise<TtsConfig> {
         parsed.rate <= 2
           ? parsed.rate
           : DEFAULT_CONFIG.rate,
-      voiceId:
-        typeof parsed.voiceId === "string" || parsed.voiceId === null
-          ? parsed.voiceId
-          : DEFAULT_CONFIG.voiceId,
+      voiceIds,
     };
   } catch {
     return { ...DEFAULT_CONFIG };

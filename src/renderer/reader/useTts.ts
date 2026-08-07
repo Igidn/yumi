@@ -115,6 +115,11 @@ export function useTts(
   const rateRef = useRef(1);
   const voiceRef = useRef<TtsVoice | null>(null);
   const backendRef = useRef<TtsBackend>("web");
+  /** Persisted voice id per backend; survives provider switches in-session. */
+  const voiceIdsRef = useRef<Record<TtsBackend, string | null>>({
+    web: null,
+    edge: null,
+  });
   const utteranceIdRef = useRef(0);
   // Track the last highlight block so voice/rate changes can restart from it.
   const highlightBlockRef = useRef<number | null>(null);
@@ -408,7 +413,7 @@ export function useTts(
     saveTtsConfig({
       backend: backendRef.current,
       rate: rateRef.current,
-      voiceId: voiceRef.current?.id ?? null,
+      voiceIds: { ...voiceIdsRef.current },
     });
   }, []);
 
@@ -421,8 +426,9 @@ export function useTts(
       backendRef.current = cfg.backend;
       setRateState(cfg.rate);
       rateRef.current = cfg.rate;
+      voiceIdsRef.current = { ...cfg.voiceIds };
       // voice restore is deferred until voices are populated below
-      pendingVoiceId = cfg.voiceId;
+      pendingVoiceId = cfg.voiceIds[cfg.backend];
     });
     return () => {
       cancelled = true;
@@ -699,6 +705,7 @@ export function useTts(
     (v: TtsVoice) => {
       setVoiceState(v);
       voiceRef.current = v;
+      voiceIdsRef.current[backendRef.current] = v.id;
       persistConfig();
       if (continueRef.current || pendingRestartRef.current !== null) {
         // Park playback paused at the current block; play resumes it with
@@ -730,9 +737,10 @@ export function useTts(
       setBackendState(b);
       backendRef.current = b;
       // Backend voice lists are disjoint; drop the selection until the new
-      // list populates (restore-on-mount handles the persisted voice).
+      // list populates, then restore that backend's saved voice.
       setVoiceState(null);
       voiceRef.current = null;
+      pendingVoiceId = voiceIdsRef.current[b];
       persistConfig();
       if (wasActive) {
         pendingRestartRef.current = { blockIdx, charOffset: 0 };
