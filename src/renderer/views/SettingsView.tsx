@@ -397,11 +397,14 @@ export function SettingsView() {
               <Row label="Line spacing">
                 <div className="flex items-center gap-0.5 rounded-[9px] border border-edge bg-field p-0.5">
                   {LINE_HEIGHT_PRESETS.map((preset) => {
-                    const active = Math.abs(settings.lineHeight - preset) < 0.01;
+                    const active =
+                      Math.abs(settings.lineHeight - preset) < 0.01;
                     return (
                       <button
                         key={preset}
-                        onClick={() => update({ ...settings, lineHeight: preset })}
+                        onClick={() =>
+                          update({ ...settings, lineHeight: preset })
+                        }
                         aria-pressed={active}
                         aria-label={`Line spacing ${preset}`}
                         className={`flex h-8 w-10 items-center justify-center rounded-[7px] transition-colors ${
@@ -485,7 +488,9 @@ export function SettingsView() {
                     className={`${ctrl} flex max-w-[240px] items-center gap-1.5 px-3`}
                   >
                     <span className="max-w-[190px] truncate">
-                      {voice ? `${voice.name} · ${voice.lang}` : "Default voice"}
+                      {voice
+                        ? `${voice.name} · ${voice.lang}`
+                        : "Default voice"}
                     </span>
                     <ChevronDown
                       size={12}
