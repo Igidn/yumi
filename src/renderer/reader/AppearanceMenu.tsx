@@ -7,7 +7,7 @@ import {
   type ReaderTheme,
 } from "./settings";
 
-const THEMES: { id: ReaderTheme; label: string; bg: string; ink: string }[] = [
+export const THEMES: { id: ReaderTheme; label: string; bg: string; ink: string }[] = [
   { id: "light", label: "Light", bg: "#ffffff", ink: "#1c1c1e" },
   { id: "sepia", label: "Sepia", bg: "#f3ead6", ink: "#463926" },
   { id: "dark", label: "Dark", bg: "#19160c", ink: "#e8e3d8" },
@@ -129,7 +129,15 @@ export function AppearanceMenu({
   );
 }
 
-function LinesIcon({ tight, loose }: { tight?: boolean; loose?: boolean }) {
+export function LinesIcon({
+  tight,
+  loose,
+  className = "text-reader",
+}: {
+  tight?: boolean;
+  loose?: boolean;
+  className?: string;
+}) {
   const gap = tight ? 3 : loose ? 7 : 5;
   return (
     <svg
@@ -140,7 +148,7 @@ function LinesIcon({ tight, loose }: { tight?: boolean; loose?: boolean }) {
       stroke="currentColor"
       strokeWidth="1.5"
       strokeLinecap="round"
-      className="text-reader"
+      className={className}
       aria-hidden
     >
       <line x1="3" y1={9 - gap} x2="15" y2={9 - gap} />
