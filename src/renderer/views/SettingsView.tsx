@@ -155,7 +155,7 @@ export function SettingsView() {
   const [tts, setTts] = useState<TtsConfig>({
     backend: "web",
     rate: 1,
-    voiceId: null,
+    voiceIds: { web: null, edge: null },
   });
   const [voices, setVoices] = useState<TtsVoice[]>([]);
   const [voiceMenu, setVoiceMenu] = useState(false);
@@ -244,7 +244,7 @@ export function SettingsView() {
     saveTtsConfig(next);
   };
 
-  const voice = voices.find((v) => v.id === tts.voiceId) ?? null;
+  const voice = voices.find((v) => v.id === tts.voiceIds[tts.backend]) ?? null;
 
   /** Speak SAMPLE_TEXT with the current voice/speed; toggles to stop. */
   const handleTest = () => {
@@ -257,7 +257,7 @@ export function SettingsView() {
       window.yumi
         .invoke("tts:speak", {
           text: SAMPLE_TEXT,
-          voice: tts.voiceId,
+          voice: tts.voiceIds[tts.backend],
           rate: tts.rate,
         })
         .then(async (res) => {
@@ -456,9 +456,7 @@ export function SettingsView() {
                     return (
                       <button
                         key={b}
-                        onClick={() =>
-                          updateTts({ ...tts, backend: b, voiceId: null })
-                        }
+                        onClick={() => updateTts({ ...tts, backend: b })}
                         aria-pressed={active}
                         className={`rounded-[7px] px-3.5 py-1 text-[12px] capitalize transition-colors ${
                           active
@@ -503,7 +501,10 @@ export function SettingsView() {
                       <MenuItem
                         active={voice === null}
                         onClick={() => {
-                          updateTts({ ...tts, voiceId: null });
+                          updateTts({
+                            ...tts,
+                            voiceIds: { ...tts.voiceIds, [tts.backend]: null },
+                          });
                           setVoiceMenu(false);
                         }}
                       >
@@ -515,7 +516,13 @@ export function SettingsView() {
                           active={voice?.id === v.id}
                           sub={v.lang}
                           onClick={() => {
-                            updateTts({ ...tts, voiceId: v.id });
+                            updateTts({
+                              ...tts,
+                              voiceIds: {
+                                ...tts.voiceIds,
+                                [tts.backend]: v.id,
+                              },
+                            });
                             setVoiceMenu(false);
                           }}
                         >
