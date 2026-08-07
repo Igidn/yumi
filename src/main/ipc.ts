@@ -14,7 +14,11 @@ import { appSettings, books } from "./db/schema";
 import { registerDrawingIpcHandlers } from "./drawings-ipc";
 import { bookForRenderer, deleteBook, importBook } from "./import";
 import { getCoversDir } from "./paths";
-import { loadReaderBook, loadReaderChapter, saveReaderProgress } from "./reader";
+import {
+  loadReaderBook,
+  loadReaderChapter,
+  saveReaderProgress,
+} from "./reader";
 import { getReadingStats, logReadingSeconds } from "./reading";
 import { getStore } from "./store";
 import { registerTtsHandlers } from "./tts";
