@@ -25,8 +25,7 @@ export async function loadTtsConfig(): Promise<TtsConfig> {
       // Pre-per-backend configs stored a single voiceId for the active backend.
       voiceId?: unknown;
     };
-    const stored: Partial<Record<TtsBackend, unknown>> =
-      parsed.voiceIds ?? {};
+    const stored: Partial<Record<TtsBackend, unknown>> = parsed.voiceIds ?? {};
     const voiceIds: Record<TtsBackend, string | null> = {
       edge: typeof stored.edge === "string" ? stored.edge : null,
       web: typeof stored.web === "string" ? stored.web : null,
