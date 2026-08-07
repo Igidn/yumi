@@ -1,6 +1,6 @@
 export type Platform = "darwin" | "win32" | "linux";
 
-export type BookFormat = "epub";
+export type BookFormat = "epub" | "webnovel";
 
 export type TtsBackend = "edge" | "web";
 
@@ -151,6 +151,7 @@ export type IPCChannel =
   | "reading:log"
   | "reading:stats"
   | "import:book"
+  | "import:webnovel"
   | "dialog:openFile"
   | "dialog:openImage"
   | "db:fts5"
@@ -166,9 +167,9 @@ export type IPCChannel =
   | "tts:stop"
   | "tts:voices";
 
-/** Result of an `import:book` call (SPEC §1 duplicate handling). */
+/** Result of an `import:book` / `import:webnovel` call (SPEC §1 duplicate handling). */
 export type ImportOutcome =
-  | { status: "imported"; book: Book }
+  | { status: "imported"; book: Book; chapterCount?: number }
   | { status: "duplicate"; existingBook: Book }
   | { status: "skipped"; existingBook: Book };
 
@@ -212,6 +213,13 @@ export interface IPCPayloads {
     // existing book; "replace" deletes the existing book then imports.
     duplicateHandling?: "skip" | "replace";
   };
+  // Import a webnovel from a freewebnovel.com/novel/{slug} page: fetch the
+  // cover/title/author/chapter list and cache them. Same duplicate semantics
+  // as import:book, keyed on the novel URL.
+  "import:webnovel": {
+    url: string;
+    duplicateHandling?: "skip" | "replace";
+  };
   "dialog:openFile": void;
   "dialog:openImage": void;
   "db:fts5": void;
@@ -242,6 +250,7 @@ export interface IPCResponses {
   "reading:log": void;
   "reading:stats": ReadingStats;
   "import:book": ImportOutcome;
+  "import:webnovel": ImportOutcome;
   "dialog:openFile": string[];
   "dialog:openImage": string | null;
   "db:fts5": boolean;

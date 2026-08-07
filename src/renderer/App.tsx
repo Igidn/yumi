@@ -18,8 +18,13 @@ export default function App() {
   const navRef = useRef<HTMLElement>(null);
   const [pill, setPill] = useState({ left: 0, width: 0 });
 
-  const { importing, importPaths, pendingDuplicate, resolveDuplicate } =
-    useImport();
+  const {
+    importing,
+    importPaths,
+    importWebnovel,
+    pendingDuplicate,
+    resolveDuplicate,
+  } = useImport();
 
   // Apple Books flow: clicking a cover opens the book in its own window.
   const openBook = (book: Book) => {
@@ -133,6 +138,7 @@ export default function App() {
             onOpenBook={openBook}
             importing={importing}
             importPaths={importPaths}
+            importWebnovel={importWebnovel}
           />
         )}
         {view === "settings" && <SettingsView />}

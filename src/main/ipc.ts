@@ -18,6 +18,7 @@ import { loadReaderBook, saveReaderProgress } from "./reader";
 import { getReadingStats, logReadingSeconds } from "./reading";
 import { getStore } from "./store";
 import { registerTtsHandlers } from "./tts";
+import { importWebnovel } from "./webnovel";
 import { closeReaderWindow, openReaderWindow } from "./windows";
 
 type Handler<C extends IPCChannel> = (
@@ -217,6 +218,14 @@ export function registerIpcHandlers(): void {
       await db.select().from(books).where(eq(books.id, payload.id)).limit(1)
     )[0];
     if (!row) throw new Error(`Book not found: ${payload.id}`);
+    // Webnovels have no file to reveal; open the source page in the browser.
+    if (row.format === "webnovel") {
+      if (row.sourcePath && /^https?:\/\//i.test(row.sourcePath)) {
+        await shell.openExternal(row.sourcePath);
+        return;
+      }
+      throw new Error(`Novel URL missing: ${row.sourcePath}`);
+    }
     if (!row.sourcePath || !fs.existsSync(row.sourcePath)) {
       throw new Error(`Book file missing: ${row.sourcePath}`);
     }
@@ -231,6 +240,15 @@ export function registerIpcHandlers(): void {
     // Only notify when the library actually changed: a fresh import or a
     // replace (which deletes then inserts). A duplicate prompt or a skip
     // leaves the library untouched.
+    if (outcome.status === "imported") broadcastEvent("library:changed");
+    return outcome;
+  });
+
+  handle("import:webnovel", async (_, payload) => {
+    const outcome = await importWebnovel(
+      payload.url,
+      payload.duplicateHandling ?? "prompt",
+    );
     if (outcome.status === "imported") broadcastEvent("library:changed");
     return outcome;
   });

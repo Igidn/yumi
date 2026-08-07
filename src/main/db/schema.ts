@@ -4,7 +4,7 @@ export const books = sqliteTable("books", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   title: text("title").notNull(),
   author: text("author").notNull().default(""),
-  format: text("format").$type<"epub">().notNull(),
+  format: text("format").$type<"epub" | "webnovel">().notNull(),
   sourcePath: text("source_path").notNull(),
   // SHA-256 of the imported file content; the dedup key (SPEC §1).
   sha256: text("sha256"),
@@ -31,6 +31,9 @@ export const chapters = sqliteTable("chapters", {
     .references(() => books.id, { onDelete: "cascade" }),
   title: text("title").notNull(),
   index: integer("index").notNull(), // order within the book
+  // For webnovel books: the chapter page URL on freewebnovel.com (fetching
+  // and caching chapter text on first read is a reader-flow step).
+  sourceUrl: text("source_url"),
   rawText: text("raw_text").notNull(), // OCR output
   agentExpandedText: text("agent_expanded_text"), // after agent pre-expansion
   agentExpandedAt: text("agent_expanded_at"),

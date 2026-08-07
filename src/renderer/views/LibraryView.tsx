@@ -2,6 +2,7 @@ import {
   ArrowDownNarrowWide,
   ArrowUpNarrowWide,
   BookOpen,
+  ChevronDown,
   Plus,
   Search,
 } from "lucide-react";
@@ -11,22 +12,23 @@ import type { Book } from "../../shared/types";
 import { BookCard } from "../components/BookCard";
 import { BookDetail } from "../components/BookDetail";
 import { BookMenu, type MenuState } from "../components/BookMenu";
+import { ImportMenu } from "../components/ImportMenu";
 import { ReadingGoalPanel } from "../components/ReadingGoalPanel";
 import { SortMenu } from "../components/SortMenu";
+import { WebnovelPrompt } from "../components/WebnovelPrompt";
+import type { ImportResult, WebnovelImportResult } from "../hooks/useImport";
 import { compareBooks, SORT_OPTIONS, type SortKey } from "../library/sort";
 
 export function LibraryView({
   onOpenBook,
   importing,
   importPaths,
+  importWebnovel,
 }: {
   onOpenBook: (book: Book) => void;
   importing: boolean;
-  importPaths: (paths: string[]) => Promise<{
-    ok: number;
-    skipped: number;
-    failed: { path: string; error: string }[];
-  }>;
+  importPaths: (paths: string[]) => Promise<ImportResult>;
+  importWebnovel: (url: string) => Promise<WebnovelImportResult>;
 }) {
   // null = first fetch hasn't landed yet; avoids flashing the empty
   // state before books:list resolves on mount.
@@ -41,6 +43,9 @@ export function LibraryView({
   const [detailBookId, setDetailBookId] = useState<number | null>(null);
   const [menu, setMenu] = useState<MenuState | null>(null);
   const sortTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const importTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
+  const [webnovelOpen, setWebnovelOpen] = useState(false);
 
   const fetchBooks = () => window.yumi.invoke("books:list").then(setBooks);
 
@@ -111,6 +116,28 @@ export function LibraryView({
     }
   };
 
+  const handleWebnovel = async (url: string) => {
+    setWebnovelOpen(false);
+    setImportMessage(null);
+    const result = await importWebnovel(url);
+    if (result.status === "imported") {
+      setImportMessage(
+        `Imported "${result.title}"` +
+          (result.chapterCount ? ` with ${result.chapterCount} chapters` : ""),
+      );
+    } else if (result.status === "skipped") {
+      setImportMessage(`"${result.title}" is already in your library`);
+    } else {
+      setImportMessage(`Webnovel import failed: ${result.message}`);
+    }
+  };
+
+  // Point the shared Import menu at whichever button opened it.
+  const openImportMenu = (e: React.MouseEvent<HTMLButtonElement>) => {
+    importTriggerRef.current = e.currentTarget;
+    setImportOpen(true);
+  };
+
   const sectionLabel =
     "text-[11px] font-semibold uppercase tracking-[0.12em] text-muted";
 
@@ -165,14 +192,26 @@ export function LibraryView({
           )}
         </div>
         <button
-          onClick={handleImport}
+          onClick={openImportMenu}
           disabled={importing}
-          className="app-no-drag flex h-9 shrink-0 items-center gap-1.5 rounded-[8px] bg-accent px-4 text-[12px] font-semibold text-on-accent transition-[filter] hover:brightness-110 disabled:opacity-60"
+          ref={importTriggerRef}
+          className="app-no-drag flex h-9 shrink-0 items-center gap-1.5 rounded-[8px] bg-accent px-3.5 text-[12px] font-semibold text-on-accent transition-[filter] hover:brightness-110 disabled:opacity-60"
           aria-label="Import a book"
+          aria-haspopup="menu"
+          aria-expanded={importOpen}
         >
           <Plus size={14} strokeWidth={2.5} />
           <span>{importing ? "Importing…" : "Import"}</span>
+          <ChevronDown size={13} strokeWidth={2.25} />
         </button>
+        {importOpen && (
+          <ImportMenu
+            anchorRef={importTriggerRef}
+            onImport={() => void handleImport()}
+            onWebnovel={() => setWebnovelOpen(true)}
+            onClose={() => setImportOpen(false)}
+          />
+        )}
       </div>
 
       {importMessage && (
@@ -242,12 +281,12 @@ export function LibraryView({
             for one.
           </p>
           <button
-            onClick={handleImport}
+            onClick={openImportMenu}
             disabled={importing}
-            className="mt-6 flex h-9 items-center gap-1.5 rounded-[8px] bg-accent px-4 text-[12px] font-semibold text-on-accent transition-[filter] hover:brightness-110 disabled:opacity-60"
+            className="app-no-drag mt-6 flex h-9 items-center gap-1.5 rounded-[8px] bg-accent px-4 text-[12px] font-semibold text-on-accent transition-[filter] hover:brightness-110 disabled:opacity-60"
           >
             <Plus size={14} strokeWidth={2.5} />
-            {importing ? "Importing…" : "Import a book"}
+            {importing ? "Importing…" : "Import"}
           </button>
         </div>
       ) : visibleBooks.length === 0 ? (
@@ -299,6 +338,14 @@ export function LibraryView({
             </div>
           </section>
         </>
+      )}
+
+      {webnovelOpen && (
+        <WebnovelPrompt
+          importing={importing}
+          onImport={(url) => void handleWebnovel(url)}
+          onClose={() => setWebnovelOpen(false)}
+        />
       )}
     </div>
   );

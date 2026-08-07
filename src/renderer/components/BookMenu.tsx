@@ -77,7 +77,9 @@ export function BookMenu({
           onClose();
         }}
       >
-        Reveal in folder
+        {menu.book.format === "webnovel"
+          ? "Open source page"
+          : "Reveal in folder"}
       </button>
       <button
         role="menuitem"
