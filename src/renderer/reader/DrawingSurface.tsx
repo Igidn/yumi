@@ -238,7 +238,8 @@ export function DrawingSurface({
           zoom: restored.appState.zoom,
         },
       });
-      // updateScene doesn't carry files; push image data separately.
+      // updateScene accepts files at runtime (addMissingFiles), but the 0.18
+      // types don't expose it — push image data separately instead of casting.
       if (Object.keys(restored.files).length > 0) {
         api.addFiles(Object.values(restored.files));
       }
