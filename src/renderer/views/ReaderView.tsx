@@ -7,7 +7,11 @@ import {
   useState,
 } from "react";
 
-import type { ReaderPayload, TtsSelection } from "../../shared/types";
+import type {
+  ReaderChapter,
+  ReaderPayload,
+  TtsSelection,
+} from "../../shared/types";
 import { AppearanceMenu } from "../reader/AppearanceMenu";
 import { ContextMenu, getTtsSelection } from "../reader/ContextMenu";
 import { FloatingPanel } from "../reader/FloatingPanel";
@@ -50,6 +54,19 @@ const colsCache: {
   payload: ReaderPayload | null;
   cols: number[];
 } = { key: "", payload: null, cols: [] };
+
+/** Replace a fetched chapter in a payload copy, or return it unchanged. */
+function mergeChapter(
+  prev: ReaderPayload | null,
+  loaded: ReaderChapter,
+): ReaderPayload | null {
+  if (!prev) return prev;
+  const idx = prev.chapters.findIndex((c) => c.id === loaded.id);
+  if (idx === -1) return prev;
+  const chapters = prev.chapters.slice();
+  chapters[idx] = loaded;
+  return { ...prev, chapters };
+}
 
 /**
  * The standalone reader window root (Apple Books flow: library → cover click
@@ -151,6 +168,40 @@ export function ReaderView({ bookId }: { bookId: number }) {
   // back into the payload by chapter id, so a fetch that resolves while the
   // user has moved on still lands correctly (and the cache makes the next
   // visit instant).
+  /** One in-flight fetch per chapter; reader navigation and TTS auto-advance
+   *  can request the same chapter concurrently, so they share the promise. */
+  const chapterFetchInflightRef = useRef<Map<number, Promise<ReaderChapter>>>(
+    new Map(),
+  );
+  const loadChapter = useCallback(
+    (ch: ReaderChapter): Promise<ReaderChapter> => {
+      const inflight = chapterFetchInflightRef.current.get(ch.id);
+      if (inflight) return inflight;
+      const data = payloadRef.current;
+      if (!data) return Promise.reject(new Error("Reader payload not loaded"));
+      setChapterFetch((prev) => new Map(prev).set(ch.id, "loading"));
+      const p = window.yumi
+        .invoke("reader:chapter", { bookId: data.book.id, chapterId: ch.id })
+        .then((loaded) => {
+          const next = mergeChapter(payloadRef.current, loaded);
+          if (next) payloadRef.current = next;
+          setPayload((prev) => mergeChapter(prev, loaded));
+          setChapterFetch((prev) => new Map(prev).set(ch.id, "done"));
+          return loaded;
+        })
+        .catch((err) => {
+          setChapterError(String(err?.message ?? err));
+          setChapterFetch((prev) => new Map(prev).set(ch.id, "error"));
+          throw err;
+        })
+        .finally(() => {
+          chapterFetchInflightRef.current.delete(ch.id);
+        });
+      chapterFetchInflightRef.current.set(ch.id, p);
+      return p;
+    },
+    [],
+  );
   useEffect(() => {
     const data = payload;
     if (!data || data.book.format !== "webnovel") return;
@@ -158,26 +209,30 @@ export function ReaderView({ bookId }: { bookId: number }) {
     if (!ch || ch.blocks.length > 0) return;
     const state = chapterFetch.get(ch.id);
     if (state === "loading" || state === "done" || state === "error") return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- kicking off the fetch must flip the map to "loading" so the loading screen renders and the guard prevents a double-fetch on the immediate re-render.
-    setChapterFetch((prev) => new Map(prev).set(ch.id, "loading"));
-    window.yumi
-      .invoke("reader:chapter", { bookId: data.book.id, chapterId: ch.id })
-      .then((loaded) => {
-        setPayload((prev) => {
-          if (!prev) return prev;
-          const idx = prev.chapters.findIndex((c) => c.id === loaded.id);
-          if (idx === -1) return prev;
-          const chapters = prev.chapters.slice();
-          chapters[idx] = loaded;
-          return { ...prev, chapters };
-        });
-        setChapterFetch((prev) => new Map(prev).set(ch.id, "done"));
-      })
-      .catch((err) => {
-        setChapterError(String(err?.message ?? err));
-        setChapterFetch((prev) => new Map(prev).set(ch.id, "error"));
-      });
-  }, [chapterPos, payload, chapterFetch]);
+    // Errors surface via chapterError + the retry button; loadChapter
+    // already handled the rejection.
+    void loadChapter(ch).catch(() => {});
+  }, [chapterPos, payload, chapterFetch, loadChapter]);
+
+  /** TTS auto-advance callback: fetch an uncached webnovel chapter's text
+   *  before speaking it. Null when there's nothing to fetch (EPUB chapters
+   *  always ship blocks — an empty one is genuinely empty); rejects when
+   *  the fetch fails so auto-advance stops on the reader's error screen. */
+  const fetchChapterForTts = useCallback(
+    (pos: number): Promise<ReaderChapter | null> => {
+      const data = payloadRef.current;
+      if (!data || data.book.format !== "webnovel") {
+        return Promise.resolve(null);
+      }
+      const ch = data.chapters[pos];
+      if (!ch) return Promise.resolve(null);
+      if (ch.blocks.length > 0) return Promise.resolve(ch);
+      const inflight = chapterFetchInflightRef.current.get(ch.id);
+      if (inflight) return inflight;
+      return loadChapter(ch);
+    },
+    [loadChapter],
+  );
 
   const retryChapter = useCallback(() => {
     setChapterError(null);
@@ -297,7 +352,11 @@ export function ReaderView({ bookId }: { bookId: number }) {
   );
 
   // TTS: independent playback position, decoupled from reader chapter.
-  const tts = useTts(payload?.chapters ?? [], readerChapterPosRef);
+  const tts = useTts(
+    payload?.chapters ?? [],
+    readerChapterPosRef,
+    fetchChapterForTts,
+  );
 
   // Auto-advance reader chapter when TTS advances (only if reader was on the same chapter).
   const prevTtsChapterPosRef = useRef(tts.ttsChapterPos);
@@ -590,9 +649,7 @@ export function ReaderView({ bookId }: { bookId: number }) {
     chapter.blocks.length === 0 &&
     chapterFetch.get(chapter.id) === "loading";
   const chapterFailed =
-    chapter !== null &&
-    chapter.blocks.length === 0 &&
-    chapterError !== null;
+    chapter !== null && chapter.blocks.length === 0 && chapterError !== null;
 
   // Apple Books shows the rightmost visible page of the current spread,
   // numbered across the whole book (not restarting per chapter).
