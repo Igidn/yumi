@@ -19,9 +19,9 @@
 ## Screenshots
 
 <p align="center">
-  <img src="assets/screenshot-library.jpg" alt="Library" width="32%">
-  <img src="assets/screenshot-reader.jpg" alt="Reader" width="32%">
-  <img src="assets/screenshot-drawing.jpg" alt="Drawing" width="32%">
+  <img src="assets/screenshot-library.jpg" alt="Library" width="100%">
+  <img src="assets/screenshot-reader.jpg" alt="Reader" width="100%">
+  <img src="assets/screenshot-drawing.jpg" alt="Drawing" width="100%">
 </p>
 
 ---
