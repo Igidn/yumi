@@ -4,7 +4,7 @@
   "productName": "Yumi",
   "afterPack": "build/afterPack.js",
   "directories": { "output": "release" },
-  "files": ["dist/**/*", "package.json"],
+  "files": ["dist/**/*", "drizzle/**", "package.json"],
   "mac":
     {
       "target": "dmg",
