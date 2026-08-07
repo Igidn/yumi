@@ -28,7 +28,9 @@ export function LibraryView({
     failed: { path: string; error: string }[];
   }>;
 }) {
-  const [books, setBooks] = useState<Book[]>([]);
+  // null = first fetch hasn't landed yet; avoids flashing the empty
+  // state before books:list resolves on mount.
+  const [books, setBooks] = useState<Book[] | null>(null);
   const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>({
     field: "title",
@@ -64,13 +66,14 @@ export function LibraryView({
 
   const visibleBooks = useMemo(() => {
     const q = query.trim().toLowerCase();
+    const list = books ?? [];
     const filtered = q
-      ? books.filter(
+      ? list.filter(
           (book) =>
             book.title.toLowerCase().includes(q) ||
             book.author.toLowerCase().includes(q),
         )
-      : books;
+      : list;
     return [...filtered].sort((a, b) => compareBooks(a, b, sortKey));
   }, [books, query, sortKey]);
 
@@ -78,7 +81,7 @@ export function LibraryView({
   // searching, since the filtered grid below already answers the query.
   const shelf = useMemo(() => {
     if (query.trim()) return [];
-    return books
+    return (books ?? [])
       .filter((b) => b.progress > 0 && b.progress < 1)
       .sort((a, b) => compareBooks(a, b, { field: "recent", dir: "desc" }))
       .slice(0, 5);
@@ -87,7 +90,7 @@ export function LibraryView({
   const detailBook =
     detailBookId === null
       ? null
-      : (books.find((b) => b.id === detailBookId) ?? null);
+      : (books?.find((b) => b.id === detailBookId) ?? null);
 
   const handleImport = async () => {
     setImportMessage(null);
@@ -187,7 +190,9 @@ export function LibraryView({
           }}
           onUpdated={(updated) =>
             setBooks((prev) =>
-              prev.map((b) => (b.id === updated.id ? updated : b)),
+              prev
+                ? prev.map((b) => (b.id === updated.id ? updated : b))
+                : prev,
             )
           }
         />
@@ -214,14 +219,16 @@ export function LibraryView({
               )
               .then((updated) =>
                 setBooks((prev) =>
-                  prev.map((b) => (b.id === updated.id ? updated : b)),
+                  prev
+                    ? prev.map((b) => (b.id === updated.id ? updated : b))
+                    : prev,
                 ),
               );
           }}
         />
       )}
 
-      {books.length === 0 ? (
+      {books === null ? null : books.length === 0 ? (
         /* Empty library: give the import action somewhere to live. */
         <div className="flex flex-col items-center pt-[72px] text-center">
           <div className="flex h-16 w-16 items-center justify-center rounded-full bg-shell">
