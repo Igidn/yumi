@@ -137,9 +137,10 @@ export function SettingsView() {
             </div>
           </div>
 
-          {/* Live preview of the chosen theme + typography. */}
+          {/* Live preview of the chosen theme + typography. Fixed height so
+              the card doesn't resize when the text size or spacing changes. */}
           <div
-            className={`reader-${settings.theme} mt-5 rounded-[8px] border border-reader-edge bg-reader px-5 py-4`}
+            className={`reader-${settings.theme} mt-5 flex h-[120px] items-center overflow-hidden rounded-[8px] border border-reader-edge bg-reader px-5 py-4`}
           >
             <p
               className="reader-content text-reader"
