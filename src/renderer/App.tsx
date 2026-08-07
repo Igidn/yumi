@@ -14,7 +14,7 @@ const NAV_ITEMS: { id: View; label: string }[] = [
 ];
 
 export default function App() {
-  const [view, setView] = useState<View>("library");
+  const [view, setView] = useState<View>("settings");
   const navRef = useRef<HTMLElement>(null);
   const [pill, setPill] = useState({ left: 0, width: 0 });
 
