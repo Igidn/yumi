@@ -304,9 +304,6 @@ export function SettingsView() {
           <h1 className="mt-4 font-reading text-[30px] leading-none text-ink">
             Settings
           </h1>
-          <p className="mt-2.5 text-[13px] text-muted">
-            Paper, type, and voice for the reading room.
-          </p>
         </header>
 
         <div className="mt-8 space-y-9">
@@ -314,7 +311,6 @@ export function SettingsView() {
             num="I"
             icon={<BookOpenText size={13} strokeWidth={2} />}
             title="Reader"
-            aside="Applies to every book"
           >
             {/* Theme picker — three miniature pages, each in its own theme. */}
             <div className="grid grid-cols-3 gap-3 p-4 pb-3.5">
@@ -450,7 +446,6 @@ export function SettingsView() {
             num="II"
             icon={<AudioLines size={13} strokeWidth={2} />}
             title="Text to speech"
-            aside="Applies to the next book you open"
           >
             <div>
               {/* Provider — same choices as the in-reader TTS bar. */}
