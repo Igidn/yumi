@@ -175,11 +175,7 @@ export function DrawingSurface({
 
   const saveRef = useRef(saveScene);
   const debouncedSaveRef = useRef<Debounced<
-    [
-      readonly OrderedExcalidrawElement[],
-      AppState,
-      BinaryFiles,
-    ]
+    [readonly OrderedExcalidrawElement[], AppState, BinaryFiles]
   > | null>(null);
 
   useEffect(() => {
