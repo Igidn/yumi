@@ -1,5 +1,28 @@
 @import "tailwindcss";
 
+/* Bundled Google Fonts (latin subset): Sono 400, Sora 400/600. */
+@font-face {
+  font-family: "Sono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("./assets/fonts/sono-400.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Sora";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("./assets/fonts/sora-400.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Sora";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("./assets/fonts/sora-600.woff2") format("woff2");
+}
+
 /* App-wide: no focus outlines. */
 *:focus {
   outline: none;
