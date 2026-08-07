@@ -1,5 +1,10 @@
 @import "tailwindcss";
 
+/* App-wide: no focus outlines. */
+*:focus {
+  outline: none;
+}
+
 @theme {
   /* Palette extracted from the Penpot "Library page" design */
   --color-page: #1a1815; /* app background */
