@@ -4,6 +4,7 @@ import { Excalidraw, getSceneVersion, restore } from "@excalidraw/excalidraw";
 import type { OrderedExcalidrawElement } from "@excalidraw/excalidraw/element/types";
 import type {
   AppState,
+  BinaryFiles,
   ExcalidrawImperativeAPI,
 } from "@excalidraw/excalidraw/types";
 import { useEffect, useRef } from "react";
@@ -157,10 +158,14 @@ export function DrawingSurface({
   const saveScene = async (
     elements: readonly OrderedExcalidrawElement[],
     appState: AppState,
+    files: BinaryFiles,
   ) => {
     const blob: SceneBlob = {
       elements,
       appState: pickPersistedAppState(appState),
+      // Images arrive as dataURL-encoded BinaryFileData — JSON-safe, so
+      // they persist in the blob and survive reload.
+      files,
     };
     await window.yumi.invoke("drawing:save-scene", {
       tabId,
@@ -170,7 +175,7 @@ export function DrawingSurface({
 
   const saveRef = useRef(saveScene);
   const debouncedSaveRef = useRef<Debounced<
-    [readonly OrderedExcalidrawElement[], AppState]
+    [readonly OrderedExcalidrawElement[], AppState, BinaryFiles]
   > | null>(null);
 
   useEffect(() => {
@@ -181,8 +186,12 @@ export function DrawingSurface({
   // debounce window never swallows the user's last stroke.
   useEffect(() => {
     const debounced = debounce(
-      (elements: readonly OrderedExcalidrawElement[], appState: AppState) => {
-        void saveRef.current(elements, appState).catch(console.error);
+      (
+        elements: readonly OrderedExcalidrawElement[],
+        appState: AppState,
+        files: BinaryFiles,
+      ) => {
+        void saveRef.current(elements, appState, files).catch(console.error);
       },
       SAVE_DEBOUNCE_MS,
     );
@@ -205,6 +214,7 @@ export function DrawingSurface({
         {
           elements: (blob?.elements ?? []) as never,
           appState: sanitizeLoadedAppState(blob?.appState),
+          files: (blob?.files ?? {}) as BinaryFiles,
         },
         null,
         null,
@@ -228,6 +238,11 @@ export function DrawingSurface({
           zoom: restored.appState.zoom,
         },
       });
+      // updateScene accepts files at runtime (addMissingFiles), but the 0.18
+      // types don't expose it — push image data separately instead of casting.
+      if (Object.keys(restored.files).length > 0) {
+        api.addFiles(Object.values(restored.files));
+      }
     });
     return unsub;
   }, [tabId]);
@@ -259,9 +274,13 @@ export function DrawingSurface({
             }),
           };
 
-          return { elements, appState };
+          return {
+            elements,
+            appState,
+            files: (blob?.files ?? {}) as BinaryFiles,
+          };
         }}
-        onChange={(elements, appState) => {
+        onChange={(elements, appState, files) => {
           const fingerprint = {
             elementsVersion: getSceneVersion(elements),
             viewportKey: viewportKey(appState),
@@ -274,13 +293,7 @@ export function DrawingSurface({
             return; // echo of our own load/updateScene — nothing to save
           }
           lastPersistedRef.current = fingerprint;
-          debouncedSaveRef.current?.(elements, appState);
-        }}
-        onPaste={(data) => {
-          // Binary files (pasted images) aren't persisted in the scene blob,
-          // so they'd be broken after reload — reject them.
-          if (data.files && Object.keys(data.files).length > 0) return false;
-          return true;
+          debouncedSaveRef.current?.(elements, appState, files);
         }}
         UIOptions={{
           canvasActions: {
@@ -291,7 +304,6 @@ export function DrawingSurface({
             saveAsImage: false,
             toggleTheme: false,
           },
-          tools: { image: false },
         }}
       />
     </div>
