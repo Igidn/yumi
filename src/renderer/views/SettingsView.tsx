@@ -328,7 +328,7 @@ export function SettingsView() {
                     className="group flex flex-col text-left"
                   >
                     <span
-                      className={`reader-${theme.id} relative block h-[108px] overflow-hidden rounded-[10px] border-2 px-3 py-2.5 transition-colors ${
+                      className={`reader-${theme.id} relative block h-[108px] overflow-hidden rounded-[10px] border-2 bg-reader px-3 py-2.5 transition-colors ${
                         active
                           ? "border-accent"
                           : "border-edge/80 group-hover:border-muted"
@@ -355,7 +355,7 @@ export function SettingsView() {
               })}
             </div>
 
-            <div className="divide-y divide-edge/50 border-t border-edge/50">
+            <div>
               {/* Font size stepper, same affordance as the AA menu. */}
               <Row label="Text size">
                 <div className="flex h-9 items-center rounded-[9px] border border-edge bg-field">
@@ -423,7 +423,7 @@ export function SettingsView() {
             </div>
 
             {/* Live page preview in the chosen theme + typography. */}
-            <div className="border-t border-edge/50 px-4 py-4">
+            <div className="px-4 py-4">
               <div
                 className={`reader-${settings.theme} rounded-[10px] border border-reader-edge bg-reader px-5 pb-4 pt-3`}
               >
@@ -449,7 +449,7 @@ export function SettingsView() {
             title="Text to speech"
             aside="Applies to the next book you open"
           >
-            <div className="divide-y divide-edge/50">
+            <div>
               {/* Provider — same choices as the in-reader TTS bar. */}
               <Row label="Provider">
                 <div className="flex items-center gap-0.5 rounded-[9px] border border-edge bg-field p-0.5">
