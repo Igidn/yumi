@@ -77,6 +77,14 @@ export function ReaderView({ bookId }: { bookId: number }) {
     useState<TtsSelection | null>(null);
   const [jump, setJump] = useState<PageJump | null>(null);
   const [reposition, setReposition] = useState<Reposition | null>(null);
+  /**
+   * Per-chapter webnovel fetch state: chapter text is fetched on first read
+   * and cached in the DB; the loading screen covers the network round-trip.
+   */
+  const [chapterFetch, setChapterFetch] = useState<
+    Map<number, "loading" | "done" | "error">
+  >(new Map());
+  const [chapterError, setChapterError] = useState<string | null>(null);
   /** Slide direction for chapter-switch animation: -1 prev, 1 next, 0 none. */
   const [slideDir, setSlideDir] = useState<-1 | 0 | 1>(0);
   // Hyperlink history: stack of positions visited before clicking a link.
@@ -135,6 +143,52 @@ export function ReaderView({ bookId }: { bookId: number }) {
       cancelled = true;
     };
   }, [bookId]);
+
+  // Webnovels: chapter text is fetched on first read (network round-trip)
+  // then cached by the main process. Whenever the current chapter has no
+  // blocks yet and isn't being/been fetched, request it — this covers both
+  // opening the book (resume chapter) and switching chapters. Results merge
+  // back into the payload by chapter id, so a fetch that resolves while the
+  // user has moved on still lands correctly (and the cache makes the next
+  // visit instant).
+  useEffect(() => {
+    const data = payload;
+    if (!data || data.book.format !== "webnovel") return;
+    const ch = data.chapters[chapterPos];
+    if (!ch || ch.blocks.length > 0) return;
+    const state = chapterFetch.get(ch.id);
+    if (state === "loading" || state === "done" || state === "error") return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- kicking off the fetch must flip the map to "loading" so the loading screen renders and the guard prevents a double-fetch on the immediate re-render.
+    setChapterFetch((prev) => new Map(prev).set(ch.id, "loading"));
+    window.yumi
+      .invoke("reader:chapter", { bookId: data.book.id, chapterId: ch.id })
+      .then((loaded) => {
+        setPayload((prev) => {
+          if (!prev) return prev;
+          const idx = prev.chapters.findIndex((c) => c.id === loaded.id);
+          if (idx === -1) return prev;
+          const chapters = prev.chapters.slice();
+          chapters[idx] = loaded;
+          return { ...prev, chapters };
+        });
+        setChapterFetch((prev) => new Map(prev).set(ch.id, "done"));
+      })
+      .catch((err) => {
+        setChapterError(String(err?.message ?? err));
+        setChapterFetch((prev) => new Map(prev).set(ch.id, "error"));
+      });
+  }, [chapterPos, payload, chapterFetch]);
+
+  const retryChapter = useCallback(() => {
+    setChapterError(null);
+    const ch = payload?.chapters[chapterPos];
+    if (!ch) return;
+    setChapterFetch((prev) => {
+      const next = new Map(prev);
+      next.delete(ch.id);
+      return next;
+    });
+  }, [chapterPos, payload]);
 
   const flushProgress = useCallback(() => {
     const data = payloadRef.current;
@@ -529,6 +583,17 @@ export function ReaderView({ bookId }: { bookId: number }) {
   const { book, chapters } = payload;
   const chapter = chapters[chapterPos] ?? null;
 
+  // Uncached webnovel chapter mid-fetch → cover the surface with a loading
+  // screen (issue: loading screen while chapter text is fetched).
+  const chapterLoading =
+    chapter !== null &&
+    chapter.blocks.length === 0 &&
+    chapterFetch.get(chapter.id) === "loading";
+  const chapterFailed =
+    chapter !== null &&
+    chapter.blocks.length === 0 &&
+    chapterError !== null;
+
   // Apple Books shows the rightmost visible page of the current spread,
   // numbered across the whole book (not restarting per chapter).
   const pageLabel = (() => {
@@ -702,24 +767,58 @@ export function ReaderView({ bookId }: { bookId: number }) {
               </div>
             )
           )}
-          <PagedChapter
-            key={chapter.id}
-            chapter={chapter}
-            fontSize={settings.fontSize}
-            lineHeight={settings.lineHeight}
-            initialFraction={landingFraction}
-            jump={jump}
-            reposition={reposition}
-            fragmentTarget={fragmentTarget}
-            highlightBlockIndex={
-              chapterPos === tts.ttsChapterPos ? tts.highlightBlockIndex : null
-            }
-            onTtsSpreadChange={setTtsSpread}
-            onSpreadChange={handleSpreadChange}
-            onOverflow={handleOverflow}
-            onLinkNavigate={handleLinkNavigate}
-            onContextMenu={handleContextMenu}
-          />
+          {chapterLoading ? (
+            <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3">
+              <div className="flex h-4 items-end gap-[3px]">
+                {[0, 1, 2].map((i) => (
+                  <span
+                    key={i}
+                    className="h-4 w-[3px] origin-bottom rounded-full bg-reader-muted"
+                    style={{
+                      animation: `reader-eq 0.9s ease-in-out ${i * 0.12}s infinite`,
+                    }}
+                  />
+                ))}
+              </div>
+              <p className="text-[12px] text-reader-muted">Loading chapter…</p>
+            </div>
+          ) : chapterFailed ? (
+            <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 px-8">
+              <p className="text-[13px] text-reader">
+                Couldn't load this chapter.
+              </p>
+              <p className="max-w-[420px] text-center text-[12px] leading-relaxed text-reader-muted">
+                {chapterError}
+              </p>
+              <button
+                onClick={retryChapter}
+                className="mt-1 rounded-[7px] bg-reader-edge/60 px-3 py-1.5 text-[12px] text-reader transition-colors hover:bg-reader-edge"
+              >
+                Try again
+              </button>
+            </div>
+          ) : (
+            <PagedChapter
+              key={chapter.id}
+              chapter={chapter}
+              fontSize={settings.fontSize}
+              lineHeight={settings.lineHeight}
+              initialFraction={landingFraction}
+              jump={jump}
+              reposition={reposition}
+              fragmentTarget={fragmentTarget}
+              highlightBlockIndex={
+                chapterPos === tts.ttsChapterPos
+                  ? tts.highlightBlockIndex
+                  : null
+              }
+              onTtsSpreadChange={setTtsSpread}
+              onSpreadChange={handleSpreadChange}
+              onOverflow={handleOverflow}
+              onLinkNavigate={handleLinkNavigate}
+              onContextMenu={handleContextMenu}
+            />
+          )}
         </div>
       ) : (
         <div className="flex flex-1 items-center justify-center px-8">

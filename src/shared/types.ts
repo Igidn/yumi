@@ -147,6 +147,7 @@ export type IPCChannel =
   | "books:reveal"
   | "reader:open"
   | "reader:load"
+  | "reader:chapter"
   | "reader:progress"
   | "reading:log"
   | "reading:stats"
@@ -195,6 +196,9 @@ export interface IPCPayloads {
   "reader:open": { id: number };
   // Reader window → main: request book + chapters for rendering.
   "reader:load": { id: number };
+  // Reader window → main: request one chapter's blocks, fetching + caching
+  // webnovel chapter text on first read (epubs return instantly).
+  "reader:chapter": { bookId: number; chapterId: number };
   "reader:progress": {
     bookId: number;
     chapterId: number;
@@ -246,6 +250,7 @@ export interface IPCResponses {
   "books:reveal": void;
   "reader:open": void;
   "reader:load": ReaderPayload;
+  "reader:chapter": ReaderChapter;
   "reader:progress": void;
   "reading:log": void;
   "reading:stats": ReadingStats;

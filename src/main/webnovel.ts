@@ -4,7 +4,7 @@ import { net } from "electron";
 import fs from "fs";
 import path from "path";
 
-import type { ImportOutcome } from "../shared/types";
+import type { ContentBlock, ImportOutcome } from "../shared/types";
 import { getDb } from "./database";
 import { books, chapters } from "./db/schema";
 import { bookForRenderer, deleteBook } from "./import";
@@ -257,6 +257,227 @@ function fetchHtmlWithRetry(url: string): Promise<string> {
 
 function fetchFragmentWithRetry(url: string): Promise<string> {
   return withRetry(fetchChapterFragment, url);
+}
+
+/**
+ * Watermark/anti-scraping noise freewebnovel mixes into chapter text. Any
+ * paragraph matching one of these is dropped entirely. The "Freewebnᴏvel"
+ * spelling uses an obfuscated o, hence the fuzzy `\w*` in the pattern.
+ */
+const WATERMARK_PATTERNS: RegExp[] = [
+  /new novel chapters are published on freewebnovel\.com/i,
+  /the source of this content is freewebn\w*vel\.com/i,
+  /we are moving freewebnovel\.com to libread\.com/i,
+  /this story originates from/i,
+  /ensure the author gets the support/i,
+];
+
+function isWatermark(text: string): boolean {
+  return WATERMARK_PATTERNS.some((re) => re.test(text));
+}
+
+/**
+ * Extract the inner HTML of the chapter-text container: `<div id="article">`
+ * on current pages, `<div class="txt">` on older ones. Tracks nested divs so
+ * the match ends at the container's real close tag, not the first `</div>`.
+ * Returns null when neither container is present.
+ */
+function extractArticleInner(html: string): string | null {
+  const startRe = /<div\b[^>]*\bid\s*=\s*["']article["'][^>]*>/i;
+  let start = startRe.exec(html);
+  if (!start) {
+    start = /<div\b[^>]*\bclass\s*=\s*["'][^"']*\btxt\b[^"']*["'][^>]*>/i.exec(
+      html,
+    );
+  }
+  if (!start) return null;
+
+  let depth = 0;
+  let i = start.index + start[0].length;
+  const n = html.length;
+  let end = n;
+  while (i < n) {
+    const lt = html.indexOf("<", i);
+    if (lt === -1) break;
+    const gt = html.indexOf(">", lt);
+    if (gt === -1) break;
+    const tag = html.slice(lt + 1, gt).trim();
+    i = gt + 1;
+    if (tag.startsWith("/") && tag.length > 1) {
+      depth--;
+      if (depth === 0) {
+        end = lt;
+        break;
+      }
+    } else if (/^div\b/i.test(tag) && !/\/$/.test(tag)) {
+      depth++;
+    }
+  }
+  let inner = html.slice(start.index + start[0].length, end);
+  // The article div also wraps the chapter's comments widget (its own
+  // container divs balance the depth, so it survives the walk above). Cut
+  // everything from the comments section on — story text ends before it.
+  const commentsIdx = inner.search(
+    /<div\b[^>]*\bid\s*=\s*["']readerPageComments["']/i,
+  );
+  if (commentsIdx !== -1) inner = inner.slice(0, commentsIdx);
+  return inner;
+}
+
+/** Drop script/style/noscript blocks before paragraph splitting. */
+function stripScripts(inner: string): string {
+  return inner.replace(
+    /<(script|style|noscript|iframe)\b[^>]*>[\s\S]*?<\/\1\s*>/gi,
+    "",
+  );
+}
+
+/** Inline emphasis mapping: mirror the EPUB parser's whitelist. */
+const INLINE_EMPH: Record<string, string> = {
+  em: "em",
+  i: "em",
+  strong: "strong",
+  b: "strong",
+  sup: "sup",
+};
+
+function escapeHtmlText(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+/**
+ * Walk one block's inline HTML, producing both the plain text (TTS/search)
+ * and a minimal-whitelist HTML string (em/strong/br/sup kept; a/span/div
+ * unwrapped; <sub> dropped — the site hides watermark fragments in them).
+ * Tolerates broken markup: unknown tags are unwrapped, comments skipped,
+ * and an unclosed <sub> stops eating at the end of the block.
+ */
+function parseWebnovelInline(input: string): { text: string; html: string } {
+  let text = "";
+  const parts: string[] = [];
+  const stack: string[] = [];
+  let i = 0;
+  const n = input.length;
+  while (i < n) {
+    const lt = input.indexOf("<", i);
+    if (lt === -1) {
+      const piece = decodeEntities(input.slice(i));
+      text += piece;
+      parts.push(escapeHtmlText(piece));
+      break;
+    }
+    const piece = decodeEntities(input.slice(i, lt));
+    text += piece;
+    parts.push(escapeHtmlText(piece));
+    if (input.startsWith("<!--", lt)) {
+      const end = input.indexOf("-->", lt + 4);
+      i = end === -1 ? n : end + 3;
+      continue;
+    }
+    const gt = input.indexOf(">", lt);
+    if (gt === -1) {
+      i = n;
+      continue;
+    }
+    const raw = input.slice(lt + 1, gt).trim();
+    i = gt + 1;
+    const name = raw.match(/^\/?([a-zA-Z][a-zA-Z0-9]*)/)?.[1]?.toLowerCase();
+    if (!name) continue;
+    const closing = raw.startsWith("/");
+    if (name === "br") {
+      text += " ";
+      parts.push("<br/>");
+      continue;
+    }
+    if (name === "sub") {
+      const closeIdx = input.toLowerCase().indexOf("</sub", i);
+      if (closeIdx === -1) {
+        i = n;
+        continue;
+      }
+      const closeGt = input.indexOf(">", closeIdx);
+      i = closeGt === -1 ? n : closeGt + 1;
+      continue;
+    }
+    if (closing) {
+      if (stack[stack.length - 1] === name) {
+        stack.pop();
+        parts.push(`</${name}>`);
+      }
+      continue;
+    }
+    const mapped = INLINE_EMPH[name];
+    if (mapped) {
+      stack.push(mapped);
+      parts.push(`<${mapped}>`);
+    }
+  }
+  const html = parts
+    .join("")
+    .split(/<br\s*\/?>/)
+    .map((seg) => seg.replace(/\s+/g, " ").trim())
+    .filter((seg) => seg.length > 0)
+    .join("<br/>");
+  return { text: text.replace(/\s+/g, " ").trim(), html };
+}
+
+/** Turn a `<p>`/heading's inner HTML into a reader block, or null if empty. */
+function paragraphToBlock(inner: string, level?: number): ContentBlock | null {
+  const { text, html } = parseWebnovelInline(inner);
+  if (!text || isWatermark(text)) return null;
+  const block: ContentBlock = level
+    ? { type: "heading", text, level }
+    : { type: "paragraph", text };
+  if (html.includes("<")) block.html = html;
+  return block;
+}
+
+/**
+ * Parse a chapter page's article container into reader blocks. Chapter text
+ * is a run of `<p>` elements; anything else (ad divs, scripts) is ignored by
+ * construction. Chapters rendered without `<p>` tags fall back to splitting
+ * on `<br>`.
+ */
+function chapterHtmlToBlocks(articleHtml: string): ContentBlock[] {
+  const inner = stripScripts(articleHtml);
+  const blocks: ContentBlock[] = [];
+  const pRe = /<(?:p|h([1-6]))\b[^>]*>([\s\S]*?)<\/(?:p|h\1)\s*>/gi;
+  let m: RegExpExecArray | null;
+  let matched = false;
+  while ((m = pRe.exec(inner))) {
+    matched = true;
+    const level = m[1] ? Number(m[1]) : undefined;
+    const block = paragraphToBlock(m[2], level);
+    if (block) blocks.push(block);
+  }
+  if (!matched) {
+    for (const seg of inner.split(/<br\s*\/?>/i)) {
+      const block = paragraphToBlock(seg);
+      if (block) blocks.push(block);
+    }
+  }
+  return blocks;
+}
+
+/**
+ * Fetch one chapter page and extract its text as reader blocks. This is the
+ * reader flow: called on first open / chapter change, then the result is
+ * cached in `chapters.rawText` so revisiting the chapter is instant.
+ * Throws when the page can't be fetched or has no parseable text container.
+ */
+export async function fetchWebnovelChapterBlocks(
+  chapterUrl: string,
+): Promise<ContentBlock[]> {
+  const html = await fetchHtmlWithRetry(chapterUrl);
+  const inner = extractArticleInner(html);
+  if (!inner) {
+    throw new Error("Couldn't find the chapter text on the page.");
+  }
+  const blocks = chapterHtmlToBlocks(inner);
+  if (blocks.length === 0) {
+    throw new Error("Couldn't parse any text from this chapter.");
+  }
+  return blocks;
 }
 
 function extFromContentType(contentType: string | null): string | null {

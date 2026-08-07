@@ -9,6 +9,7 @@ import { getDb } from "./database";
 import { books, chapters } from "./db/schema";
 import { parseEpub } from "./epub";
 import { bookForRenderer, coverUrlForRenderer } from "./import";
+import { fetchWebnovelChapterBlocks } from "./webnovel";
 
 /** Per-book parse lock so two concurrent reader:load calls don't both insert. */
 const parseLocks = new Map<number, ReturnType<typeof doParseEpub>>();
@@ -176,6 +177,64 @@ export async function loadReaderBook(bookId: number): Promise<ReaderPayload> {
     chapters: readerChapters,
     resumeChapterPos,
   };
+}
+
+/**
+ * Load a single chapter for rendering, fetching + caching webnovel chapter
+ * text on first read. EPUBs and already-cached webnovel chapters return
+ * instantly; an uncached webnovel chapter triggers a network round-trip and
+ * the result is stored in `chapters.rawText` so the next visit is instant.
+ */
+export async function loadReaderChapter(
+  bookId: number,
+  chapterId: number,
+): Promise<ReaderChapter> {
+  const db = await getDb();
+  const book = (
+    await db.select().from(books).where(eq(books.id, bookId)).limit(1)
+  )[0];
+  if (!book || book.trashed) throw new Error(`Book not found: ${bookId}`);
+  const row = (
+    await db
+      .select()
+      .from(chapters)
+      .where(and(eq(chapters.id, chapterId), eq(chapters.bookId, bookId)))
+      .limit(1)
+  )[0];
+  if (!row) throw new Error(`Chapter not found: ${chapterId}`);
+
+  let blocks = blocksFromRaw(row.rawText);
+  if (book.format === "webnovel" && blocks.length === 0 && row.sourceUrl) {
+    blocks = await fetchWebnovelChapterBlocks(row.sourceUrl);
+    // Cache the fetched text; a failed fetch leaves rawText empty so the
+    // next open retries rather than showing a permanently blank chapter.
+    await db
+      .update(chapters)
+      .set({ rawText: JSON.stringify(blocks) })
+      .where(eq(chapters.id, chapterId));
+  }
+
+  const readerChapter: ReaderChapter = {
+    id: row.id,
+    title: row.title,
+    index: row.index,
+    scrollPosition: row.scrollPosition,
+    blocks,
+  };
+
+  // Chapter 0 leads with the cover image, mirroring loadReaderBook.
+  // The cover is prepended at read time, never persisted into rawText.
+  if (readerChapter.index === 0) {
+    const coverUrl = coverUrlForRenderer(book.coverPath);
+    if (coverUrl) {
+      const rel = coverUrl.replace(/^yumi:\/\/asset\//, "");
+      readerChapter.blocks = [
+        { type: "image", text: "Cover", src: rel },
+        ...readerChapter.blocks,
+      ];
+    }
+  }
+  return readerChapter;
 }
 
 /** Persist reading position: per-chapter fraction plus whole-book fraction. */
