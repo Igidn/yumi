@@ -90,6 +90,11 @@ export interface DrawingTab {
 export interface SceneBlob {
   elements: readonly unknown[];
   appState: Record<string, unknown>;
+  /**
+   * Excalidraw image files (dataURL-encoded, so JSON-safe). Present only
+   * when the scene contains images.
+   */
+  files?: Record<string, unknown>;
 }
 
 /** A flat, renderer-ready block extracted from a chapter's XHTML. */
