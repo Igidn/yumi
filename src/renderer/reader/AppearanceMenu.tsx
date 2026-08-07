@@ -7,7 +7,12 @@ import {
   type ReaderTheme,
 } from "./settings";
 
-export const THEMES: { id: ReaderTheme; label: string; bg: string; ink: string }[] = [
+export const THEMES: {
+  id: ReaderTheme;
+  label: string;
+  bg: string;
+  ink: string;
+}[] = [
   { id: "light", label: "Light", bg: "#ffffff", ink: "#1c1c1e" },
   { id: "sepia", label: "Sepia", bg: "#f3ead6", ink: "#463926" },
   { id: "dark", label: "Dark", bg: "#19160c", ink: "#e8e3d8" },

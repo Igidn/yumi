@@ -8,8 +8,8 @@ import {
   FONT_SIZE_MIN,
   LINE_HEIGHT_PRESETS,
   loadReaderSettings,
-  saveReaderSettings,
   type ReaderSettings,
+  saveReaderSettings,
 } from "../reader/settings";
 
 const rowLabel = "text-[12px] font-medium text-ink";
