@@ -12,7 +12,12 @@ import type {
 import { getDb, hasFts5 } from "./database";
 import { appSettings, books } from "./db/schema";
 import { registerDrawingIpcHandlers } from "./drawings-ipc";
-import { bookForRenderer, deleteBook, importBook, withChapterInfo } from "./import";
+import {
+  bookForRenderer,
+  deleteBook,
+  importBook,
+  withChapterInfo,
+} from "./import";
 import { getCoversDir } from "./paths";
 import {
   loadReaderBook,

@@ -60,7 +60,7 @@ function normalizeNovelUrl(input: string): string {
   const match = u.pathname.match(/^\/novel\/([^/]+?)(?:\.html)?(?:\/.*)?$/i);
   if (!match) {
     throw new Error(
-      "Paste a freewebnovel.com novel link, e.g. https://freewebnovel.com/novel/{slug}",
+      "Paste a freewebnovel.com novel link, e.g. https://freewebnovel.com/novel/...",
     );
   }
   return `https://${SITE_HOST}/novel/${match[1].toLowerCase()}`;
