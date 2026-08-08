@@ -604,7 +604,8 @@ export async function importWebnovel(
 
   // Chapter text is fetched on first read (reader flow); cache the URL +
   // title now so the list is available offline.
-  db.insert(chapters)
+  await db
+    .insert(chapters)
     .values(
       chapterLinks.map((link, i) => ({
         bookId: book.id,
@@ -656,7 +657,8 @@ export async function refreshWebnovelChapters(
   const fresh = links.filter((link) => !knownUrls.has(link.url));
   if (fresh.length === 0) return 0;
   const maxIndex = existing.reduce((max, c) => Math.max(max, c.index), -1);
-  db.insert(chapters)
+  await db
+    .insert(chapters)
     .values(
       fresh.map((link, i) => ({
         bookId,

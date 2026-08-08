@@ -23,7 +23,7 @@ export function WebnovelPrompt({
 
   const submit = () => {
     const trimmed = url.trim();
-    if (!/^https?:\/\/freewebnovel\.com\//i.test(trimmed)) {
+    if (!/^https?:\/\/freewebnovel\.com/i.test(trimmed)) {
       setError(
         "Paste a freewebnovel.com link, e.g. https://freewebnovel.com/novel/...",
       );
