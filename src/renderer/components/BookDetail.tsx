@@ -2,6 +2,7 @@ import { ImagePlus, Trash2, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import type { Book } from "../../shared/types";
+import { chapterLabel } from "../shared/chapter-label";
 
 function progressLabel(book: Book): string {
   return book.progress >= 1
@@ -208,7 +209,7 @@ export function BookDetail({
                 // keeps the book-wide estimate.
                 <Row
                   label="Chapter"
-                  value={`Chapter ${book.currentChapterIndex ?? 1}`}
+                  value={chapterLabel(book.currentChapterIndex ?? 1)}
                 />
               ) : (
                 /* ponytail: page count arrives with the reader */

@@ -2,6 +2,7 @@ import { Check, Ellipsis, Globe } from "lucide-react";
 import { useState } from "react";
 
 import type { Book } from "../../shared/types";
+import { chapterLabel } from "../shared/chapter-label";
 
 function CoverPlaceholder({
   title,
@@ -103,7 +104,7 @@ export function BookCard({
               Webnovel
             </span>
             <span className="text-[11px] tabular-nums text-muted">
-              Chapter {book.currentChapterIndex ?? 1}
+              {chapterLabel(book.currentChapterIndex ?? 1)}
             </span>
           </div>
         ) : finished ? (
