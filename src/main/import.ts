@@ -1,11 +1,11 @@
 import { createHash } from "crypto";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import fs from "fs";
 import path from "path";
 
 import type { Book, BookFormat, ImportOutcome } from "../shared/types";
 import { getDb } from "./database";
-import { books } from "./db/schema";
+import { books, chapters } from "./db/schema";
 import { readEpubMeta } from "./epub";
 import { getBooksDir, getCoversDir, getUserDataPath } from "./paths";
 
@@ -27,6 +27,38 @@ export function coverUrlForRenderer(coverPath: string | null): string | null {
 
 export function bookForRenderer(book: Book): Book {
   return { ...book, coverPath: coverUrlForRenderer(book.coverPath) };
+}
+
+type BookRow = typeof books.$inferSelect;
+
+/**
+ * Attach webnovel reading position — the 1-based index and title of the
+ * last-read chapter — to book rows headed for the renderer, resolved from
+ * `books.lastChapterId`. Epub books (and webnovels never opened) pass
+ * through untouched; the library UI falls back to "Chapter 1" for those.
+ */
+export async function withChapterInfo(rows: BookRow[]): Promise<BookRow[]> {
+  const toLookup = rows.filter(
+    (b) => b.format === "webnovel" && b.lastChapterId != null,
+  );
+  if (toLookup.length === 0) return rows;
+  const db = await getDb();
+  const ids = [...new Set(toLookup.map((b) => b.lastChapterId!))];
+  const chapterRows = await db
+    .select()
+    .from(chapters)
+    .where(inArray(chapters.id, ids));
+  const chapterById = new Map(chapterRows.map((c) => [c.id, c]));
+  return rows.map((b) => {
+    if (b.format !== "webnovel" || b.lastChapterId == null) return b;
+    const chapter = chapterById.get(b.lastChapterId);
+    if (!chapter) return b;
+    return {
+      ...b,
+      currentChapterIndex: chapter.index + 1,
+      currentChapterTitle: chapter.title,
+    };
+  });
 }
 
 export function getFormatForFile(filePath: string): BookFormat | null {

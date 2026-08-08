@@ -103,7 +103,7 @@ export function BookCard({
               Webnovel
             </span>
             <span className="text-[11px] tabular-nums text-muted">
-              Chapter 1
+              Chapter {book.currentChapterIndex ?? 1}
             </span>
           </div>
         ) : finished ? (

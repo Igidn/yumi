@@ -203,8 +203,17 @@ export function BookDetail({
 
             <dl className="mt-5 space-y-2 text-[12px]">
               <Row label="Format" value={book.format.toUpperCase()} />
-              {/* ponytail: page count arrives with the reader */}
-              <Row label="Pages" value="—" />
+              {book.format === "webnovel" ? (
+                // Webnovels progress by chapter; the percentage row below
+                // keeps the book-wide estimate.
+                <Row
+                  label="Chapter"
+                  value={`Chapter ${book.currentChapterIndex ?? 1}`}
+                />
+              ) : (
+                /* ponytail: page count arrives with the reader */
+                <Row label="Pages" value="—" />
+              )}
               <Row label="Progress" value={progressLabel(book)} />
               <Row label="Imported" value={formatDate(book.importedAt)} />
               <Row label="Last opened" value={formatDate(book.lastOpenedAt)} />

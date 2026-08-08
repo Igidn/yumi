@@ -12,7 +12,7 @@ import type {
 import { getDb, hasFts5 } from "./database";
 import { appSettings, books } from "./db/schema";
 import { registerDrawingIpcHandlers } from "./drawings-ipc";
-import { bookForRenderer, deleteBook, importBook } from "./import";
+import { bookForRenderer, deleteBook, importBook, withChapterInfo } from "./import";
 import { getCoversDir } from "./paths";
 import {
   loadReaderBook,
@@ -80,7 +80,8 @@ export function registerIpcHandlers(): void {
       .from(books)
       .where(eq(books.trashed, 0))
       .orderBy(books.title);
-    return rows.map(bookForRenderer);
+    const enriched = await withChapterInfo(rows);
+    return enriched.map(bookForRenderer);
   });
 
   handle("books:insert", async (_, payload) => {
@@ -158,8 +159,9 @@ export function registerIpcHandlers(): void {
       .set(patch)
       .where(eq(books.id, payload.id))
       .returning();
+    const [enriched] = await withChapterInfo(rows);
     broadcastEvent("library:changed");
-    return bookForRenderer(rows[0]);
+    return bookForRenderer(enriched);
   });
 
   // Progress saves fire every few hundred ms while paging; re-rendering the

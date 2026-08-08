@@ -50,6 +50,12 @@ export interface Book {
   finishedAt: string | null;
   collection: string;
   trashed: number;
+  // Webnovel-only: 1-based number of the last-read chapter (resolved from
+  // books.lastChapterId by the main process). Absent for epub books and for
+  // webnovels that were never opened; the UI falls back to chapter 1.
+  currentChapterIndex?: number;
+  // Webnovel-only: title of the last-read chapter, for the details page.
+  currentChapterTitle?: string;
 }
 
 /** Snapshot for the library "Reading goal" panel. */
