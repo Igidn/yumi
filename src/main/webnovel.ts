@@ -185,6 +185,22 @@ async function fetchAllChapters(
   return chapters;
 }
 
+/**
+ * Fetch a novel's complete chapter list. `totalChapters` comes from the
+ * novel page meta and drives the paginated list walk; shared by the import
+ * flow and the on-open chapter-list refresh.
+ */
+async function fetchNovelChapters(
+  novelUrl: string,
+  totalChapters: number,
+): Promise<WebnovelChapterLink[]> {
+  const links = await fetchAllChapters(novelUrl, totalChapters);
+  if (links.length === 0) {
+    throw new Error("Couldn't read any chapters from this novel.");
+  }
+  return links;
+}
+
 async function fetchHtml(url: string): Promise<string> {
   const res = await net.fetch(url, { headers: BROWSER_HEADERS });
   if (!res.ok) {
@@ -553,12 +569,8 @@ export async function importWebnovel(
     }
   }
 
-  const html = await fetchHtmlWithRetry(novelUrl);
-  const meta = parseNovelMeta(html);
-  const chapterLinks = await fetchAllChapters(novelUrl, meta.totalChapters);
-  if (chapterLinks.length === 0) {
-    throw new Error("Couldn't read any chapters from this novel.");
-  }
+  const meta = parseNovelMeta(await fetchHtmlWithRetry(novelUrl));
+  const chapterLinks = await fetchNovelChapters(novelUrl, meta.totalChapters);
 
   // Only delete the existing book once the replacement has been fetched and
   // parsed successfully; a failed fetch must not lose progress/notes/drawings.
@@ -609,4 +621,54 @@ export async function importWebnovel(
     book: bookForRenderer(book),
     chapterCount: chapterLinks.length,
   };
+}
+
+/**
+ * Re-fetch a webnovel's chapter list when it's opened and append any newly
+ * published chapters (webnovel chapter lists grow over time), so new
+ * chapters show up without re-importing. Best-effort and idempotent:
+ * chapters are matched by source URL and existing rows (cached text, notes,
+ * reading positions) are never touched.
+ *
+ * Cheap fast path: the novel page's `data-total-chapters` is compared with
+ * the stored chapter count and the paginated list walk only runs when the
+ * site reports more chapters than we have. Returns how many chapters were
+ * added. Throws on network/parse failure — callers decide whether that
+ * matters (opening a book must not fail over it).
+ */
+export async function refreshWebnovelChapters(
+  bookId: number,
+  novelUrl: string,
+): Promise<number> {
+  // Offline: don't even try — the site retry/backoff would stall the open.
+  if (!net.isOnline()) return 0;
+  const db = await getDb();
+  const existing = await db
+    .select({ sourceUrl: chapters.sourceUrl, index: chapters.index })
+    .from(chapters)
+    .where(eq(chapters.bookId, bookId));
+  const meta = parseNovelMeta(await fetchHtmlWithRetry(novelUrl));
+  if (meta.totalChapters <= existing.length) return 0;
+  const links = await fetchNovelChapters(novelUrl, meta.totalChapters);
+  const knownUrls = new Set(
+    existing.filter((c) => c.sourceUrl != null).map((c) => c.sourceUrl),
+  );
+  const fresh = links.filter((link) => !knownUrls.has(link.url));
+  if (fresh.length === 0) return 0;
+  const maxIndex = existing.reduce((max, c) => Math.max(max, c.index), -1);
+  db.insert(chapters)
+    .values(
+      fresh.map((link, i) => ({
+        bookId,
+        title: link.title || `Chapter ${maxIndex + 2 + i}`,
+        index: maxIndex + 1 + i,
+        sourceUrl: link.url,
+        rawText: "",
+      })),
+    )
+    .run();
+  console.log(
+    `[webnovel] chapter-list refresh added ${fresh.length} chapters to book ${bookId}`,
+  );
+  return fresh.length;
 }

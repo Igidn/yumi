@@ -27,7 +27,7 @@ import {
 import { getReadingStats, logReadingSeconds } from "./reading";
 import { getStore } from "./store";
 import { registerTtsHandlers } from "./tts";
-import { importWebnovel } from "./webnovel";
+import { importWebnovel, refreshWebnovelChapters } from "./webnovel";
 import { closeReaderWindow, openReaderWindow } from "./windows";
 
 type Handler<C extends IPCChannel> = (
@@ -199,6 +199,24 @@ export function registerIpcHandlers(): void {
   });
 
   handle("reader:load", async (_, payload) => {
+    // Webnovels publish new chapters over time; re-fetch the chapter list
+    // while the reader shows its opening screen (the reader window invokes
+    // this itself, so the library is never blocked). Best-effort: a failed
+    // refresh keeps the cached list and loadReaderBook just returns it.
+    const db = await getDb();
+    const row = (
+      await db.select().from(books).where(eq(books.id, payload.id)).limit(1)
+    )[0];
+    let addedChapters = 0;
+    if (row?.format === "webnovel" && row.sourcePath) {
+      try {
+        addedChapters = await refreshWebnovelChapters(row.id, row.sourcePath);
+      } catch (err) {
+        console.error("[webnovel] chapter-list refresh failed:", err);
+      }
+    }
+    // Un-throttled: the library's chapter count went stale and must repaint.
+    if (addedChapters > 0) broadcastEvent("library:changed");
     return loadReaderBook(payload.id);
   });
 
