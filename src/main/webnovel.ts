@@ -63,7 +63,7 @@ function normalizeNovelUrl(input: string): string {
       "Paste a freewebnovel.com novel link, e.g. https://freewebnovel.com/novel/{slug}",
     );
   }
-  return `https://${SITE_HOST}/novel/${match[1]}`;
+  return `https://${SITE_HOST}/novel/${match[1].toLowerCase()}`;
 }
 
 function decodeEntities(input: string): string {
@@ -592,17 +592,17 @@ export async function importWebnovel(
 
   // Chapter text is fetched on first read (reader flow); cache the URL +
   // title now so the list is available offline.
-  for (const [i, link] of chapterLinks.entries()) {
-    db.insert(chapters)
-      .values({
+  db.insert(chapters)
+    .values(
+      chapterLinks.map((link, i) => ({
         bookId: book.id,
         title: link.title || `Chapter ${i + 1}`,
         index: i,
         sourceUrl: link.url,
         rawText: "",
-      })
-      .run();
-  }
+      })),
+    )
+    .run();
 
   return {
     status: "imported",
