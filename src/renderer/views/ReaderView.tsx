@@ -101,7 +101,9 @@ export function ReaderView({ bookId }: { bookId: number }) {
   const [chapterFetch, setChapterFetch] = useState<
     Map<number, "loading" | "done" | "error">
   >(new Map());
-  const [chapterError, setChapterError] = useState<string | null>(null);
+  const [chapterError, setChapterError] = useState<Map<number, string>>(
+    new Map(),
+  );
   /** Slide direction for chapter-switch animation: -1 prev, 1 next, 0 none. */
   const [slideDir, setSlideDir] = useState<-1 | 0 | 1>(0);
   // Hyperlink history: stack of positions visited before clicking a link.
@@ -187,10 +189,18 @@ export function ReaderView({ bookId }: { bookId: number }) {
           if (next) payloadRef.current = next;
           setPayload((prev) => mergeChapter(prev, loaded));
           setChapterFetch((prev) => new Map(prev).set(ch.id, "done"));
+          setChapterError((prev) => {
+            if (!prev.has(ch.id)) return prev;
+            const next = new Map(prev);
+            next.delete(ch.id);
+            return next;
+          });
           return loaded;
         })
         .catch((err) => {
-          setChapterError(String(err?.message ?? err));
+          setChapterError((prev) =>
+            new Map(prev).set(ch.id, String(err?.message ?? err)),
+          );
           setChapterFetch((prev) => new Map(prev).set(ch.id, "error"));
           throw err;
         })
@@ -235,9 +245,14 @@ export function ReaderView({ bookId }: { bookId: number }) {
   );
 
   const retryChapter = useCallback(() => {
-    setChapterError(null);
     const ch = payload?.chapters[chapterPos];
     if (!ch) return;
+    setChapterError((prev) => {
+      if (!prev.has(ch.id)) return prev;
+      const next = new Map(prev);
+      next.delete(ch.id);
+      return next;
+    });
     setChapterFetch((prev) => {
       const next = new Map(prev);
       next.delete(ch.id);
@@ -649,7 +664,9 @@ export function ReaderView({ bookId }: { bookId: number }) {
     chapter.blocks.length === 0 &&
     chapterFetch.get(chapter.id) === "loading";
   const chapterFailed =
-    chapter !== null && chapter.blocks.length === 0 && chapterError !== null;
+    chapter !== null &&
+    chapter.blocks.length === 0 &&
+    chapterError.get(chapter.id) !== undefined;
 
   // Apple Books shows the rightmost visible page of the current spread,
   // numbered across the whole book (not restarting per chapter).
@@ -845,7 +862,7 @@ export function ReaderView({ bookId }: { bookId: number }) {
                 Couldn't load this chapter.
               </p>
               <p className="max-w-[420px] text-center text-[12px] leading-relaxed text-reader-muted">
-                {chapterError}
+                {chapterError.get(chapter.id)}
               </p>
               <button
                 onClick={retryChapter}
