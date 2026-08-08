@@ -551,7 +551,6 @@ export async function importWebnovel(
     if (duplicateHandling === "skip") {
       return { status: "skipped", existingBook: bookForRenderer(existing) };
     }
-    await deleteBook(existing.id);
   }
 
   const html = await fetchHtmlWithRetry(novelUrl);
@@ -559,6 +558,12 @@ export async function importWebnovel(
   const chapterLinks = await fetchAllChapters(novelUrl, meta.totalChapters);
   if (chapterLinks.length === 0) {
     throw new Error("Couldn't read any chapters from this novel.");
+  }
+
+  // Only delete the existing book once the replacement has been fetched and
+  // parsed successfully; a failed fetch must not lose progress/notes/drawings.
+  if (existing) {
+    await deleteBook(existing.id);
   }
 
   let coverPath: string | null = null;
