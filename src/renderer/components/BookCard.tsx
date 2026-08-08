@@ -1,7 +1,8 @@
-import { Check, Ellipsis } from "lucide-react";
+import { Check, Ellipsis, Globe } from "lucide-react";
 import { useState } from "react";
 
 import type { Book } from "../../shared/types";
+import { chapterLabel } from "../shared/chapter-label";
 
 function CoverPlaceholder({
   title,
@@ -45,6 +46,7 @@ export function BookCard({
   const showCover = !!book.coverPath && !broken;
   const percent = Math.round(book.progress * 100);
   const finished = book.progress >= 1;
+  const isWebnovel = book.format === "webnovel";
 
   return (
     <div
@@ -95,7 +97,17 @@ export function BookCard({
             {book.author}
           </p>
         ) : null}
-        {finished ? (
+        {isWebnovel ? (
+          <div className="mt-1.5 flex items-center justify-between gap-2">
+            <span className="flex items-center gap-1 text-[11px] font-medium text-muted">
+              <Globe size={12} strokeWidth={2} />
+              Webnovel
+            </span>
+            <span className="text-[11px] tabular-nums text-muted">
+              {chapterLabel(book.currentChapterIndex ?? 1)}
+            </span>
+          </div>
+        ) : finished ? (
           <p className="mt-1.5 flex items-center gap-1 text-[11px] font-medium text-accent">
             <Check size={12} strokeWidth={2.5} />
             Finished

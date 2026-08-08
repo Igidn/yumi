@@ -12,12 +12,22 @@ import type {
 import { getDb, hasFts5 } from "./database";
 import { appSettings, books } from "./db/schema";
 import { registerDrawingIpcHandlers } from "./drawings-ipc";
-import { bookForRenderer, deleteBook, importBook } from "./import";
+import {
+  bookForRenderer,
+  deleteBook,
+  importBook,
+  withChapterInfo,
+} from "./import";
 import { getCoversDir } from "./paths";
-import { loadReaderBook, saveReaderProgress } from "./reader";
+import {
+  loadReaderBook,
+  loadReaderChapter,
+  saveReaderProgress,
+} from "./reader";
 import { getReadingStats, logReadingSeconds } from "./reading";
 import { getStore } from "./store";
 import { registerTtsHandlers } from "./tts";
+import { importWebnovel, refreshWebnovelChapters } from "./webnovel";
 import { closeReaderWindow, openReaderWindow } from "./windows";
 
 type Handler<C extends IPCChannel> = (
@@ -75,7 +85,8 @@ export function registerIpcHandlers(): void {
       .from(books)
       .where(eq(books.trashed, 0))
       .orderBy(books.title);
-    return rows.map(bookForRenderer);
+    const enriched = await withChapterInfo(rows);
+    return enriched.map(bookForRenderer);
   });
 
   handle("books:insert", async (_, payload) => {
@@ -153,8 +164,9 @@ export function registerIpcHandlers(): void {
       .set(patch)
       .where(eq(books.id, payload.id))
       .returning();
+    const [enriched] = await withChapterInfo(rows);
     broadcastEvent("library:changed");
-    return bookForRenderer(rows[0]);
+    return bookForRenderer(enriched);
   });
 
   // Progress saves fire every few hundred ms while paging; re-rendering the
@@ -187,7 +199,29 @@ export function registerIpcHandlers(): void {
   });
 
   handle("reader:load", async (_, payload) => {
+    // Webnovels publish new chapters over time; re-fetch the chapter list
+    // while the reader shows its opening screen (the reader window invokes
+    // this itself, so the library is never blocked). Best-effort: a failed
+    // refresh keeps the cached list and loadReaderBook just returns it.
+    const db = await getDb();
+    const row = (
+      await db.select().from(books).where(eq(books.id, payload.id)).limit(1)
+    )[0];
+    let addedChapters = 0;
+    if (row?.format === "webnovel" && row.sourcePath) {
+      try {
+        addedChapters = await refreshWebnovelChapters(row.id, row.sourcePath);
+      } catch (err) {
+        console.error("[webnovel] chapter-list refresh failed:", err);
+      }
+    }
+    // Un-throttled: the library's chapter count went stale and must repaint.
+    if (addedChapters > 0) broadcastEvent("library:changed");
     return loadReaderBook(payload.id);
+  });
+
+  handle("reader:chapter", async (_, payload) => {
+    return loadReaderChapter(payload.bookId, payload.chapterId);
   });
 
   handle("reader:progress", async (_, payload) => {
@@ -217,6 +251,14 @@ export function registerIpcHandlers(): void {
       await db.select().from(books).where(eq(books.id, payload.id)).limit(1)
     )[0];
     if (!row) throw new Error(`Book not found: ${payload.id}`);
+    // Webnovels have no file to reveal; open the source page in the browser.
+    if (row.format === "webnovel") {
+      if (row.sourcePath && /^https?:\/\//i.test(row.sourcePath)) {
+        await shell.openExternal(row.sourcePath);
+        return;
+      }
+      throw new Error(`Novel URL missing: ${row.sourcePath}`);
+    }
     if (!row.sourcePath || !fs.existsSync(row.sourcePath)) {
       throw new Error(`Book file missing: ${row.sourcePath}`);
     }
@@ -231,6 +273,15 @@ export function registerIpcHandlers(): void {
     // Only notify when the library actually changed: a fresh import or a
     // replace (which deletes then inserts). A duplicate prompt or a skip
     // leaves the library untouched.
+    if (outcome.status === "imported") broadcastEvent("library:changed");
+    return outcome;
+  });
+
+  handle("import:webnovel", async (_, payload) => {
+    const outcome = await importWebnovel(
+      payload.url,
+      payload.duplicateHandling ?? "prompt",
+    );
     if (outcome.status === "imported") broadcastEvent("library:changed");
     return outcome;
   });

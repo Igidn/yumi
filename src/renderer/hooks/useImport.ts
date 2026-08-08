@@ -13,6 +13,13 @@ export interface ImportResult {
   failed: ImportFailure[];
 }
 
+export interface WebnovelImportResult {
+  status: "imported" | "skipped" | "failed";
+  title: string;
+  chapterCount?: number;
+  message?: string;
+}
+
 /** A pending duplicate awaiting the user's skip/replace decision. */
 export interface PendingDuplicate {
   sourcePath: string;
@@ -84,9 +91,52 @@ export function useImport() {
     [],
   );
 
+  const importWebnovel = useCallback(
+    async (url: string): Promise<WebnovelImportResult> => {
+      setImporting(true);
+      try {
+        let outcome: ImportOutcome = await window.yumi.invoke(
+          "import:webnovel",
+          {
+            url,
+          },
+        );
+        if (outcome.status === "duplicate") {
+          const existingBook = outcome.existingBook;
+          const action = await new Promise<"skip" | "replace">((resolve) => {
+            resolveRef.current = resolve;
+            setPendingDuplicate({ sourcePath: url, existingBook });
+          });
+          outcome = await window.yumi.invoke("import:webnovel", {
+            url,
+            duplicateHandling: action,
+          });
+        }
+        if (outcome.status === "imported") {
+          return {
+            status: "imported",
+            title: outcome.book.title,
+            chapterCount: outcome.chapterCount,
+          };
+        }
+        return { status: "skipped", title: outcome.existingBook.title };
+      } catch (err) {
+        return {
+          status: "failed",
+          title: "",
+          message: err instanceof Error ? err.message : String(err),
+        };
+      } finally {
+        setImporting(false);
+      }
+    },
+    [],
+  );
+
   return {
     importing,
     importPaths,
+    importWebnovel,
     pendingDuplicate,
     resolveDuplicate,
   };

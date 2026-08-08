@@ -92,6 +92,8 @@ function buildWordBlockMap(text: string, blockMap: BlockMapEntry[]): number[] {
 export function useTts(
   chapters: ReaderChapter[],
   readerChapterPosRef: React.MutableRefObject<number>,
+  fetchChapter: (pos: number) => Promise<ReaderChapter | null> = async () =>
+    null,
 ) {
   const [backend, setBackendState] = useState<TtsBackend>("web");
   const [rate, setRateState] = useState(1);
@@ -135,6 +137,15 @@ export function useTts(
   }, [ttsChapterPos]);
   /** When true, the next ttsChapterPos change is an auto-advance to speak. */
   const advanceRef = useRef(false);
+  /**
+   * Lazy-loaded chapters (webnovels) have no blocks until fetched. Auto-advance
+   * calls this for the next chapter before speaking; null = nothing to fetch
+   * (an EPUB chapter that is genuinely empty), reject = fetch failed.
+   */
+  const fetchChapterRef = useRef(fetchChapter);
+  useEffect(() => {
+    fetchChapterRef.current = fetchChapter;
+  }, [fetchChapter]);
 
   useEffect(() => {
     rateRef.current = rate;
@@ -558,6 +569,9 @@ export function useTts(
   const startWeb = useCallback(
     (blocks: ContentBlock[], startBlockIdx: number, startCharOff: number) => {
       window.speechSynthesis.cancel();
+      // Bump the generation like startEdge does: invalidates any pending
+      // edge synthesis and aborts in-flight chapter fetches in speakChapter.
+      genRef.current += 1;
       pendingRestartRef.current = null;
       utteranceIdRef.current += 1;
       webSegmentsRef.current = segmentBlocks(
@@ -574,10 +588,28 @@ export function useTts(
     [playWebSegment],
   );
 
-  /** Speak a whole chapter from the start, dispatching on backend. */
+  /**
+   * Speak a whole chapter from the start, dispatching on backend. A chapter
+   * with no blocks yet (uncached webnovel text) is fetched first; only
+   * genuinely empty chapters get skipped.
+   */
   const speakChapter = useCallback(
-    (pos: number) => {
-      const blocks = chaptersRef.current[pos]?.blocks ?? [];
+    async (pos: number) => {
+      const gen = genRef.current;
+      let blocks = chaptersRef.current[pos]?.blocks ?? [];
+      if (blocks.length === 0) {
+        try {
+          const loaded = await fetchChapterRef.current(pos);
+          if (loaded) blocks = loaded.blocks;
+        } catch (err) {
+          console.error("tts auto-advance chapter fetch failed", err);
+          if (genRef.current === gen) stop();
+          return;
+        }
+        // Stop / skip-forward while the fetch was in flight: don't start a
+        // pipeline for a position we've moved on from.
+        if (genRef.current !== gen || ttsChapterPosRef.current !== pos) return;
+      }
       if (blocks.length > 0) {
         if (backendRef.current === "web") startWeb(blocks, 0, 0);
         else startEdge(blocks, 0, 0);
@@ -587,7 +619,7 @@ export function useTts(
         setTtsChapterPos((prev) => prev + 1);
       }
     },
-    [startWeb, startEdge],
+    [startWeb, startEdge, stop],
   );
 
   // Auto-advance: when ttsChapterPos changes due to an advanceRef flag,

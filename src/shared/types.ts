@@ -1,6 +1,6 @@
 export type Platform = "darwin" | "win32" | "linux";
 
-export type BookFormat = "epub";
+export type BookFormat = "epub" | "webnovel";
 
 export type TtsBackend = "edge" | "web";
 
@@ -50,6 +50,12 @@ export interface Book {
   finishedAt: string | null;
   collection: string;
   trashed: number;
+  // Webnovel-only: 1-based number of the last-read chapter (resolved from
+  // books.lastChapterId by the main process). Absent for epub books and for
+  // webnovels that were never opened; the UI falls back to chapter 1.
+  currentChapterIndex?: number;
+  // Webnovel-only: title of the last-read chapter, for the details page.
+  currentChapterTitle?: string;
 }
 
 /** Snapshot for the library "Reading goal" panel. */
@@ -147,10 +153,12 @@ export type IPCChannel =
   | "books:reveal"
   | "reader:open"
   | "reader:load"
+  | "reader:chapter"
   | "reader:progress"
   | "reading:log"
   | "reading:stats"
   | "import:book"
+  | "import:webnovel"
   | "dialog:openFile"
   | "dialog:openImage"
   | "db:fts5"
@@ -166,9 +174,9 @@ export type IPCChannel =
   | "tts:stop"
   | "tts:voices";
 
-/** Result of an `import:book` call (SPEC §1 duplicate handling). */
+/** Result of an `import:book` / `import:webnovel` call (SPEC §1 duplicate handling). */
 export type ImportOutcome =
-  | { status: "imported"; book: Book }
+  | { status: "imported"; book: Book; chapterCount?: number }
   | { status: "duplicate"; existingBook: Book }
   | { status: "skipped"; existingBook: Book };
 
@@ -194,6 +202,9 @@ export interface IPCPayloads {
   "reader:open": { id: number };
   // Reader window → main: request book + chapters for rendering.
   "reader:load": { id: number };
+  // Reader window → main: request one chapter's blocks, fetching + caching
+  // webnovel chapter text on first read (epubs return instantly).
+  "reader:chapter": { bookId: number; chapterId: number };
   "reader:progress": {
     bookId: number;
     chapterId: number;
@@ -210,6 +221,13 @@ export interface IPCPayloads {
     // Resolution for a detected duplicate. Omit ("prompt") to detect and
     // return `{ status: "duplicate" }` without writing; "skip" keeps the
     // existing book; "replace" deletes the existing book then imports.
+    duplicateHandling?: "skip" | "replace";
+  };
+  // Import a webnovel from a freewebnovel.com/novel/{slug} page: fetch the
+  // cover/title/author/chapter list and cache them. Same duplicate semantics
+  // as import:book, keyed on the novel URL.
+  "import:webnovel": {
+    url: string;
     duplicateHandling?: "skip" | "replace";
   };
   "dialog:openFile": void;
@@ -238,10 +256,12 @@ export interface IPCResponses {
   "books:reveal": void;
   "reader:open": void;
   "reader:load": ReaderPayload;
+  "reader:chapter": ReaderChapter;
   "reader:progress": void;
   "reading:log": void;
   "reading:stats": ReadingStats;
   "import:book": ImportOutcome;
+  "import:webnovel": ImportOutcome;
   "dialog:openFile": string[];
   "dialog:openImage": string | null;
   "db:fts5": boolean;
