@@ -25,7 +25,7 @@ export function WebnovelPrompt({
     const trimmed = url.trim();
     if (!/^https?:\/\/freewebnovel\.com\//i.test(trimmed)) {
       setError(
-        "Paste a freewebnovel.com link, e.g. https://freewebnovel.com/novel/{slug}",
+        "Paste a freewebnovel.com link, e.g. https://freewebnovel.com/novel/...",
       );
       return;
     }
@@ -60,7 +60,7 @@ export function WebnovelPrompt({
             if (e.key === "Enter") submit();
             if (e.key === "Escape") onClose();
           }}
-          placeholder="https://freewebnovel.com/novel/{slug}"
+          placeholder="https://freewebnovel.com/novel/..."
           spellCheck={false}
           className="mt-4 h-9 w-full rounded-[8px] border border-edge bg-field px-3 text-[13px] text-ink outline-none transition-colors placeholder:text-muted focus:border-accent/60"
         />
