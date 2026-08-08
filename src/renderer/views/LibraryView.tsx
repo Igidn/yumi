@@ -135,7 +135,7 @@ export function LibraryView({
   // Point the shared Import menu at whichever button opened it.
   const openImportMenu = (e: React.MouseEvent<HTMLButtonElement>) => {
     importTriggerRef.current = e.currentTarget;
-    setImportOpen(true);
+    setImportOpen((v) => !v);
   };
 
   const sectionLabel =
