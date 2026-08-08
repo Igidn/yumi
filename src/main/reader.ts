@@ -143,16 +143,25 @@ export async function loadReaderBook(bookId: number): Promise<ReaderPayload> {
     blocks: blocksFromRaw(row.rawText),
   }));
 
-  // Prepend the book cover as the first image in chapter zero.
+  // Prepend the book cover as the first image in chapter zero. Skipped for
+  // uncached webnovel chapters: their text is fetched lazily on first read
+  // (loadReaderChapter prepends the cover then), and a cover-only block
+  // list would mask the "not fetched yet" state the renderer keys its fetch
+  // on — leaving chapter 0's text unreachable.
   const coverUrl = coverUrlForRenderer(book.coverPath);
   if (coverUrl && readerChapters.length > 0) {
-    // Strip yumi://asset/ to get the relative path the renderer expects.
-    const rel = coverUrl.replace(/^yumi:\/\/asset\//, "");
-    readerChapters[0].blocks.unshift({
-      type: "image",
-      text: "Cover",
-      src: rel,
-    });
+    const first = readerChapters[0];
+    const lazilyFetched =
+      book.format === "webnovel" && first.blocks.length === 0;
+    if (!lazilyFetched) {
+      // Strip yumi://asset/ to get the relative path the renderer expects.
+      const rel = coverUrl.replace(/^yumi:\/\/asset\//, "");
+      first.blocks.unshift({
+        type: "image",
+        text: "Cover",
+        src: rel,
+      });
+    }
   }
 
   // Resume: find the chapter matching the stored lastChapterId.
