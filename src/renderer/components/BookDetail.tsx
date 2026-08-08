@@ -215,7 +215,12 @@ export function BookDetail({
                 /* ponytail: page count arrives with the reader */
                 <Row label="Pages" value="—" />
               )}
-              <Row label="Progress" value={progressLabel(book)} />
+              {/* Webnovels fetch chapters from remote, so book-wide progress
+                  can't be tracked; "—" keeps the row honest. */}
+              <Row
+                label="Progress"
+                value={book.format === "webnovel" ? "—" : progressLabel(book)}
+              />
               <Row label="Imported" value={formatDate(book.importedAt)} />
               <Row label="Last opened" value={formatDate(book.lastOpenedAt)} />
             </dl>
