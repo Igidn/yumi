@@ -6,7 +6,7 @@ import {
   useState,
 } from "react";
 
-import type { ReaderChapter } from "../../shared/types";
+import type { ContentBlock, ReaderChapter } from "../../shared/types";
 
 /** Column geometry of the current viewport, recomputed on resize/typography. */
 interface Geometry {
@@ -111,7 +111,7 @@ export function countChapterCols(
     if (block.type === "heading") {
       const level = Math.min(6, Math.max(1, block.level ?? 1));
       const el = document.createElement(`h${level}`);
-      el.className = `${headingClass(level, i === 0)} ${block.className ?? ""}`;
+      el.className = blockClasses(block, i, chapter.blocks);
       el.style.cssText = block.style ?? "";
       if (block.html) el.innerHTML = block.html;
       else el.textContent = block.text;
@@ -119,9 +119,7 @@ export function countChapterCols(
       return;
     }
     const p = document.createElement("p");
-    p.className = `${
-      i > 0 && chapter.blocks[i - 1].type === "paragraph" ? "reader-indent" : ""
-    } ${block.className ?? ""}`;
+    p.className = blockClasses(block, i, chapter.blocks);
     p.style.cssText = block.style ?? "";
     if (block.html) p.innerHTML = block.html;
     else p.textContent = block.text;
@@ -173,6 +171,18 @@ function headingClass(level: number, isFirst: boolean): string {
           ? "text-[1.1em]"
           : "text-[1em]";
   return `${spacing} ${size} text-center font-bold leading-snug text-reader-accent`;
+}
+
+/** Class list for a heading/paragraph block — single source of truth for the
+ *  measure pass and the live render, so column counts can't drift. */
+function blockClasses(block: ContentBlock, i: number, blocks: ContentBlock[]): string {
+  const base =
+    block.type === "heading"
+      ? headingClass(Math.min(6, Math.max(1, block.level ?? 1)), i === 0)
+      : i > 0 && blocks[i - 1].type === "paragraph"
+        ? "reader-indent"
+        : "";
+  return `${base} ${block.className ?? ""}`.trim();
 }
 
 /**
@@ -611,23 +621,19 @@ export function PagedChapter({
                     id={block.fragment || undefined}
                     data-b={i}
                     style={blockStyle}
-                    className={`${headingClass(level, i === 0)} ${block.className ?? ""} ${ttsClass}`}
+                    className={`${blockClasses(block, i, chapter.blocks)} ${ttsClass}`}
                   >
                     {body}
                   </Tag>
                 );
               }
-              // Book convention: no indent on a paragraph right after a
-              // heading; every paragraph after another paragraph is indented.
-              const indent =
-                i > 0 && chapter.blocks[i - 1].type === "paragraph";
               return (
                 <p
                   key={i}
                   id={block.fragment || undefined}
                   data-b={i}
                   style={blockStyle}
-                  className={`${indent ? "reader-indent" : ""} ${block.className ?? ""} ${ttsClass}`}
+                  className={`${blockClasses(block, i, chapter.blocks)} ${ttsClass}`}
                 >
                   {body}
                 </p>
