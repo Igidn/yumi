@@ -58,12 +58,13 @@ export function compareBooks(a: Book, b: Book, key: SortKey): number {
 }
 
 // ponytail: tiny self-check, run with `npx tsx src/renderer/library/sort.ts`.
-// Guard `process` access behind a `file://` URL check so the renderer
-// (where import.meta.url is http(s):// and `process` is undefined) never
-// evaluates it — otherwise importing this module throws ReferenceError
-// and the whole view white-screens.
+// Guard `process` access behind a `typeof` check: the browser (where
+// `process` is undefined) short-circuits, and in prod builds Vite statically
+// replaces `import.meta.url` with the bundle's `file://` URL, so the old
+// URL-based guard fired and white-screened the renderer.
 declare const process: { argv: string[] };
 const isMain =
+  typeof process !== "undefined" &&
   typeof import.meta.url === "string" &&
   import.meta.url.startsWith("file://") &&
   import.meta.url === `file://${process.argv[1]}`;
