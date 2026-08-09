@@ -117,6 +117,11 @@ export interface ContentBlock {
    * Present only when the block actually contains markup.
    */
   html?: string;
+  /** Class(es) from the source block element, forwarded to the rendered
+   *  element so class-based book CSS (e.g. centered chapter titles) applies. */
+  className?: string;
+  /** Inline style from the source block element, same forwarding. */
+  style?: string;
   /** Image blocks only: path relative to userData root, served via yumi://asset/ */
   src?: string;
   /** Natural image dimensions (pixels), so the browser can reserve space before load. */

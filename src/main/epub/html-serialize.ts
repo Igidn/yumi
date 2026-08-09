@@ -155,6 +155,10 @@ export function makeBlock(
   const block: ContentBlock = { type, text };
   if (level !== undefined) block.level = level;
   if (html.includes("<")) block.html = html;
+  const cls = node.getAttribute("class");
+  if (cls) block.className = cls;
+  const style = node.getAttribute("style");
+  if (style) block.style = style;
   const id = node.getAttribute("id") || fragment;
   if (id) block.fragment = id;
   return block;

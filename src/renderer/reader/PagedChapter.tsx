@@ -111,16 +111,18 @@ export function countChapterCols(
     if (block.type === "heading") {
       const level = Math.min(6, Math.max(1, block.level ?? 1));
       const el = document.createElement(`h${level}`);
-      el.className = headingClass(level, i === 0);
+      el.className = `${headingClass(level, i === 0)} ${block.className ?? ""}`;
+      el.style.cssText = block.style ?? "";
       if (block.html) el.innerHTML = block.html;
       else el.textContent = block.text;
       content.appendChild(el);
       return;
     }
     const p = document.createElement("p");
-    if (i > 0 && chapter.blocks[i - 1].type === "paragraph") {
-      p.className = "reader-indent";
-    }
+    p.className = `${
+      i > 0 && chapter.blocks[i - 1].type === "paragraph" ? "reader-indent" : ""
+    } ${block.className ?? ""}`;
+    p.style.cssText = block.style ?? "";
     if (block.html) p.innerHTML = block.html;
     else p.textContent = block.text;
     content.appendChild(p);
@@ -597,6 +599,9 @@ export function PagedChapter({
               );
               const ttsClass =
                 highlightBlockIndex === i ? "reader-tts-speaking" : "";
+              const blockStyle = block.style
+                ? ({ cssText: block.style } as React.CSSProperties)
+                : undefined;
               if (block.type === "heading") {
                 const level = Math.min(6, Math.max(1, block.level ?? 1));
                 const Tag = `h${level}` as "h1";
@@ -605,7 +610,8 @@ export function PagedChapter({
                     key={i}
                     id={block.fragment || undefined}
                     data-b={i}
-                    className={`${headingClass(level, i === 0)} ${ttsClass}`}
+                    style={blockStyle}
+                    className={`${headingClass(level, i === 0)} ${block.className ?? ""} ${ttsClass}`}
                   >
                     {body}
                   </Tag>
@@ -620,7 +626,8 @@ export function PagedChapter({
                   key={i}
                   id={block.fragment || undefined}
                   data-b={i}
-                  className={`${indent ? "reader-indent" : ""} ${ttsClass}`}
+                  style={blockStyle}
+                  className={`${indent ? "reader-indent" : ""} ${block.className ?? ""} ${ttsClass}`}
                 >
                   {body}
                 </p>
