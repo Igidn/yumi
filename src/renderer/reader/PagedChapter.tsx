@@ -56,6 +56,21 @@ export interface SpreadInfo {
   firstVisibleBlockIndex: number | null;
 }
 
+/** Natural width capped to the column (and, for images taller than the
+ *  column, to the height-cap the CSS applies): book CSS with `img { width:
+ *  auto }` makes Chrome ignore the width/height attrs for unloaded images
+ *  (0×0 box) — an explicit width keeps the box, and thus the column count,
+ *  identical before/after decode. Unknown height falls back to the column
+ *  width. Single source of truth for measure/render so counts can't drift. */
+function cappedImageWidth(
+  w: number,
+  h: number | undefined,
+  colWidth: number,
+  contentHeight: number,
+): number {
+  return Math.min(w, colWidth, h && h > 0 ? (contentHeight * w) / h : colWidth);
+}
+
 /** Offscreen CSS-column count for one chapter under a known layout. */
 export function countChapterCols(
   chapter: ReaderChapter,
@@ -97,15 +112,11 @@ export function countChapterCols(
       if (block.imgWidth && block.imgHeight) {
         img.width = block.imgWidth;
         img.height = block.imgHeight;
-        // Natural width capped to the column (and, for images taller than
-        // the column, to the height-cap the CSS applies): some book CSS
-        // sets img width:auto, which makes Chrome ignore the width/height
-        // attrs for unloaded images (0×0 box) — an explicit width keeps the
-        // box, and thus the column count, identical before/after decode.
-        img.style.width = `${Math.min(
+        img.style.width = `${cappedImageWidth(
           block.imgWidth,
+          block.imgHeight,
           layout.colWidth,
-          (layout.contentHeight * block.imgWidth) / block.imgHeight,
+          layout.contentHeight,
         )}px`;
       } else {
         // ponytail: unknown dimensions — use a conservative placeholder so
@@ -313,9 +324,12 @@ export function PagedChapter({
       const w = parseInt(img.getAttribute("width") ?? "", 10);
       const h = parseInt(img.getAttribute("height") ?? "", 10);
       if (Number.isFinite(w)) {
-        const capped =
-          Number.isFinite(h) && h > 0 ? (contentHeight * w) / h : colWidth;
-        img.style.width = `${Math.min(w, colWidth, capped)}px`;
+        img.style.width = `${cappedImageWidth(
+          w,
+          Number.isFinite(h) ? h : undefined,
+          colWidth,
+          contentHeight,
+        )}px`;
       }
     }
 
@@ -626,27 +640,20 @@ export function PagedChapter({
                     alt={block.text || ""}
                     width={block.imgWidth}
                     height={block.imgHeight}
-                    // Same reservation as the offscreen count: book CSS with
-                    // `img { width: auto }` zeroes unloaded image boxes, so
-                    // pin the width (capped to the column, and to the CSS
-                    // height-cap for portrait images) — the box matches the
-                    // decoded image and the measure can't drift with load
-                    // timing.
+                    // Same reservation as the offscreen count and measure
+                    // loop — keep the pre-load box identical to the decoded
+                    // image so the count can't drift with load timing.
                     style={
-                      geom && block.imgWidth && block.imgHeight
+                      geom && block.imgWidth
                         ? {
-                            width: `${Math.min(
+                            width: `${cappedImageWidth(
                               block.imgWidth,
+                              block.imgHeight,
                               geom.colWidth,
-                              (geom.contentHeight * block.imgWidth) /
-                                block.imgHeight,
+                              geom.contentHeight,
                             )}px`,
                           }
-                        : geom && block.imgWidth
-                          ? {
-                              width: `${Math.min(block.imgWidth, geom.colWidth)}px`,
-                            }
-                          : undefined
+                        : undefined
                     }
                     className="reader-image cursor-zoom-in"
                     onClick={() => setLightboxSrc(src)}
