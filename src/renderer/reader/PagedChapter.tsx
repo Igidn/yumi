@@ -310,7 +310,6 @@ export function PagedChapter({
     // render below; this covers inline <img> inside paragraph HTML and the
     // pre-geometry first render.
     for (const img of content.querySelectorAll<HTMLImageElement>("img")) {
-      if (img.complete) continue;
       const w = parseInt(img.getAttribute("width") ?? "", 10);
       const h = parseInt(img.getAttribute("height") ?? "", 10);
       if (Number.isFinite(w)) {
