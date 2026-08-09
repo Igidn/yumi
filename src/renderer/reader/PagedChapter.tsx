@@ -175,7 +175,11 @@ function headingClass(level: number, isFirst: boolean): string {
 
 /** Class list for a heading/paragraph block — single source of truth for the
  *  measure pass and the live render, so column counts can't drift. */
-function blockClasses(block: ContentBlock, i: number, blocks: ContentBlock[]): string {
+function blockClasses(
+  block: ContentBlock,
+  i: number,
+  blocks: ContentBlock[],
+): string {
   const base =
     block.type === "heading"
       ? headingClass(Math.min(6, Math.max(1, block.level ?? 1)), i === 0)
