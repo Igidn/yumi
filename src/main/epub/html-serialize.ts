@@ -1,24 +1,77 @@
 import type { ContentBlock, LinkTarget } from "./types";
 import { textOf } from "./util";
 
-const INLINE_TAG_MAP: Record<string, string> = {
-  em: "em",
-  i: "em",
-  strong: "strong",
-  b: "strong",
-  a: "a",
-  span: "span",
-  sup: "sup",
-  sub: "sub",
-};
+/** Tags that must never survive serialization. */
+const DROP_TAGS = new Set([
+  "script",
+  "style",
+  "link",
+  "meta",
+  "object",
+  "embed",
+  "iframe",
+  "video",
+  "audio",
+  "canvas",
+  "svg",
+  "form",
+  "input",
+  "button",
+  "textarea",
+  "select",
+  "noscript",
+  "template",
+]);
+
+/** Attribute names kept verbatim (values escaped); everything else — event
+ *  handlers included — is dropped. */
+const KEEP_ATTRS = ["id", "class", "style", "title", "lang", "dir", "xml:lang"];
+
+/** href schemes the renderer is allowed to keep on unresolved links. */
+const SAFE_HREF = /^(https?:|mailto:)/i;
 
 export function escapeHtmlText(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+/** Serialize a kept attribute list for an element, escaping values. */
+function safeAttrs(el: Element): string {
+  let out = "";
+  for (const name of KEEP_ATTRS) {
+    const v = el.getAttribute(name);
+    if (v != null && v !== "") out += ` ${name}="${escapeHtmlText(v)}"`;
+  }
+  return out;
+}
+
+/** <img> inside text: src rewritten to a served asset, dims kept. */
+function imgHtml(
+  el: Element,
+  imageResolver?: (src: string) => string | null,
+): string {
+  const src = el.getAttribute("src");
+  const mapped = src && imageResolver ? imageResolver(src) : null;
+  if (!mapped) return "";
+  let out = `<img src="${escapeHtmlText(mapped)}"`;
+  const alt = el.getAttribute("alt");
+  if (alt != null) {
+    out += ` alt="${escapeHtmlText(alt.replace(/\s+/g, " ").trim())}"`;
+  }
+  for (const name of ["width", "height"]) {
+    const v = el.getAttribute(name);
+    if (v && /^\d+$/.test(v)) out += ` ${name}="${v}"`;
+  }
+  return out + safeAttrs(el) + "/>";
 }
 
 export function inlineHtml(
   node: Node,
   linkResolver?: (href: string) => LinkTarget | null,
+  imageResolver?: (src: string) => string | null,
 ): string {
   let out = "";
   for (let i = 0; i < node.childNodes.length; i++) {
@@ -30,57 +83,50 @@ export function inlineHtml(
     if (child.nodeType !== 1) continue;
     const el = child as Element;
     const local = (el.localName || el.nodeName).toLowerCase();
-    if (local === "script" || local === "style") continue;
+    if (DROP_TAGS.has(local)) continue;
     if (local === "br") {
       out += "<br/>";
       continue;
     }
-    const elId = el.getAttribute("id");
-    const idAttr = elId ? ` id="${escapeHtmlText(elId)}"` : "";
-    const tag = INLINE_TAG_MAP[local];
-
-    // <span> with inline style or CSS class hints — convert to <em>/<strong>
-    if (tag === "span") {
-      const style = (el.getAttribute("style") || "").toLowerCase();
-      const cls = (el.getAttribute("class") || "").toLowerCase();
-      const inner = inlineHtml(el, linkResolver);
-      if (!inner.trim()) continue;
-      if (/font-style\s*:\s*italic/.test(style) || cls.includes("italic")) {
-        out += `<em${idAttr}>${inner}</em>`;
-      } else if (/font-weight\s*:\s*bold/.test(style) || cls.includes("bold")) {
-        out += `<strong${idAttr}>${inner}</strong>`;
-      } else {
-        out += inner;
-      }
+    if (local === "img") {
+      out += imgHtml(el, imageResolver);
       continue;
     }
 
-    if (tag === "a") {
-      const href = el.getAttribute("href");
+    if (local === "a") {
+      const href = el.getAttribute("href") || "";
       const epubType = el.getAttribute("epub:type") || "";
       const isNoteref = epubType === "noteref";
-      const inner = inlineHtml(el, linkResolver);
+      const inner = inlineHtml(el, linkResolver, imageResolver);
       if (href && inner.trim() && linkResolver) {
         const target = linkResolver(href);
         if (target) {
           const frag = target.fragment
             ? ` data-fragment="${escapeHtmlText(target.fragment)}"`
             : "";
-          const a = `<a${idAttr} data-chapter="${target.chapterIndex}"${frag} href="${escapeHtmlText(href)}">${inner}</a>`;
+          const a = `<a${safeAttrs(el)} data-chapter="${target.chapterIndex}"${frag} href="${escapeHtmlText(href)}">${inner}</a>`;
           out += isNoteref ? `<sup class="noteref">${a}</sup>` : a;
           continue;
         }
       }
-      if (elId && inner.trim()) {
-        const a = `<a${idAttr}>${inner}</a>`;
+      if (href && SAFE_HREF.test(href) && inner.trim()) {
+        const a = `<a${safeAttrs(el)} href="${escapeHtmlText(href)}">${inner}</a>`;
+        out += isNoteref ? `<sup class="noteref">${a}</sup>` : a;
+        continue;
+      }
+      if (el.getAttribute("id") && inner.trim()) {
+        const a = `<a${safeAttrs(el)}>${inner}</a>`;
         out += isNoteref ? `<sup class="noteref">${a}</sup>` : a;
         continue;
       }
       out += isNoteref ? `<sup class="noteref">${inner}</sup>` : inner;
       continue;
     }
-    const inner = inlineHtml(el, linkResolver);
-    out += tag && inner.trim() ? `<${tag}${idAttr}>${inner}</${tag}>` : inner;
+
+    const inner = inlineHtml(el, linkResolver, imageResolver);
+    out += inner.trim()
+      ? `<${local}${safeAttrs(el)}>${inner}</${local}>`
+      : inner;
   }
   return out;
 }
@@ -99,13 +145,20 @@ export function makeBlock(
   level?: number,
   linkResolver?: (href: string) => LinkTarget | null,
   fragment?: string,
+  imageResolver?: (src: string) => string | null,
 ): ContentBlock | null {
   const text = textOf(node);
   if (!text) return null;
-  const html = collapseInlineHtml(inlineHtml(node, linkResolver));
+  const html = collapseInlineHtml(
+    inlineHtml(node, linkResolver, imageResolver),
+  );
   const block: ContentBlock = { type, text };
   if (level !== undefined) block.level = level;
   if (html.includes("<")) block.html = html;
+  const cls = node.getAttribute("class");
+  if (cls) block.className = cls;
+  const style = node.getAttribute("style");
+  if (style) block.style = style;
   const id = node.getAttribute("id") || fragment;
   if (id) block.fragment = id;
   return block;

@@ -16,6 +16,15 @@ export function extractBlocks(
   const blocks: ContentBlock[] = [];
   const skip = new Set(["script", "style", "head", "title", "meta", "link"]);
 
+  // Inline <img> inside paragraphs: map source path → served asset URL.
+  const imageResolver =
+    imageMap && docHref
+      ? (src: string): string | null => {
+          const saved = imageMap.get(resolveHref(docHref, src));
+          return saved ? `yumi://asset/${saved}` : null;
+        }
+      : undefined;
+
   function imageBlock(img: Element, fragment?: string): ContentBlock | null {
     if (!imageMap || !docHref) return null;
     const src = img.getAttribute("src");
@@ -54,6 +63,7 @@ export function extractBlocks(
           +nsLocal[1],
           linkResolver,
           childFragment,
+          imageResolver,
         );
         if (block) blocks.push(block);
         continue;
@@ -72,6 +82,7 @@ export function extractBlocks(
           undefined,
           linkResolver,
           childFragment,
+          imageResolver,
         );
         if (block) blocks.push(block);
         continue;
@@ -98,6 +109,7 @@ export function extractBlocks(
           undefined,
           linkResolver,
           childFragment,
+          imageResolver,
         );
         if (block) blocks.push(block);
         continue;

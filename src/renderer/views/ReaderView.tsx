@@ -163,6 +163,44 @@ export function ReaderView({ bookId }: { bookId: number }) {
     };
   }, [bookId]);
 
+  // Book stylesheets (selector-scoped to .book-css) must be applied before
+  // the chapter renders — column counts depend on the book's typography.
+  // Re-runs only per book: payload objects also change on webnovel chapter
+  // fetches, but stylesheets are stable for the life of a book.
+  const [loadedCssKey, setLoadedCssKey] = useState<string | null>(null);
+  const stylesheetKey = payload
+    ? `${payload.book.id}|${payload.stylesheets.join("\n")}`
+    : "";
+  const stylesReady =
+    !payload ||
+    payload.stylesheets.length === 0 ||
+    loadedCssKey === stylesheetKey;
+  useEffect(() => {
+    if (!payload || payload.stylesheets.length === 0) return;
+    let cancelled = false;
+    const links = payload.stylesheets.map((href) => {
+      const link = document.createElement("link");
+      link.rel = "stylesheet";
+      link.href = href;
+      link.setAttribute("data-book-css", "");
+      return link;
+    });
+    let remaining = links.length;
+    const done = () => {
+      remaining--;
+      if (remaining === 0 && !cancelled) setLoadedCssKey(stylesheetKey);
+    };
+    for (const link of links) {
+      link.onload = done;
+      link.onerror = done;
+      document.head.appendChild(link);
+    }
+    return () => {
+      cancelled = true;
+      for (const link of links) link.remove();
+    };
+  }, [stylesheetKey, payload]);
+
   // Webnovels: chapter text is fetched on first read (network round-trip)
   // then cached by the main process. Whenever the current chapter has no
   // blocks yet and isn't being/been fetched, request it — this covers both
@@ -646,7 +684,7 @@ export function ReaderView({ bookId }: { bookId: number }) {
     );
   }
 
-  if (!payload) {
+  if (!payload || !stylesReady) {
     return (
       <div className="reader-dark flex h-screen items-center justify-center bg-reader">
         <p className="text-[13px] text-reader-muted">Opening…</p>

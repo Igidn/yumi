@@ -109,12 +109,19 @@ export interface ContentBlock {
   level?: number; // heading level 1–6
   text: string;
   /**
-   * Minimal inline markup for this block, built by the EPUB parser from a
-   * strict whitelist: only <em>/<strong>/<br>, no attributes, all text
-   * escaped. Present only when the block actually contains markup, so it is
-   * safe to inject via dangerouslySetInnerHTML.
+   * Inline markup for this block, serialized by the EPUB parser: original
+   * tags kept (em/strong/q/cite/ruby/span/div/...), attributes restricted
+   * to class/style/id/title/lang/dir, all text and attribute values escaped,
+   * script/style/iframe/form and event handlers dropped, img src rewritten
+   * to served yumi://asset URLs. Safe to inject via dangerouslySetInnerHTML.
+   * Present only when the block actually contains markup.
    */
   html?: string;
+  /** Class(es) from the source block element, forwarded to the rendered
+   *  element so class-based book CSS (e.g. centered chapter titles) applies. */
+  className?: string;
+  /** Inline style from the source block element, same forwarding. */
+  style?: string;
   /** Image blocks only: path relative to userData root, served via yumi://asset/ */
   src?: string;
   /** Natural image dimensions (pixels), so the browser can reserve space before load. */
@@ -141,6 +148,9 @@ export interface ReaderPayload {
   chapters: ReaderChapter[];
   /** Position in `chapters` to resume at (derived from books.progress). */
   resumeChapterPos: number;
+  /** Book stylesheet URLs (yumi://asset/...), selector-scoped to .book-css.
+   *  Empty for webnovels and books without stylesheets. */
+  stylesheets: string[];
 }
 
 export type IPCChannel =

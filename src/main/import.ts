@@ -205,7 +205,8 @@ export async function deleteBook(bookId: number): Promise<void> {
   await db.delete(books).where(eq(books.id, bookId));
   if (row.sourcePath) fs.rmSync(row.sourcePath, { force: true });
   if (row.coverPath) fs.rmSync(row.coverPath, { force: true });
-  // ponytail: best-effort cleanup of extracted images.
-  const imageDir = path.join(getCoversDir(), String(bookId), "images");
-  fs.rmSync(imageDir, { recursive: true, force: true });
+  // Best-effort cleanup of extracted assets (images, css, stylesheets.json).
+  // Removing the book dir also drops a stale stylesheet manifest on re-import.
+  const bookDir = path.join(getCoversDir(), String(bookId));
+  fs.rmSync(bookDir, { recursive: true, force: true });
 }

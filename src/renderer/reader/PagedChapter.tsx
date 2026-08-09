@@ -6,7 +6,7 @@ import {
   useState,
 } from "react";
 
-import type { ReaderChapter } from "../../shared/types";
+import type { ContentBlock, ReaderChapter } from "../../shared/types";
 
 /** Column geometry of the current viewport, recomputed on resize/typography. */
 interface Geometry {
@@ -70,7 +70,7 @@ export function countChapterCols(
   host.style.cssText =
     "position:absolute;left:-99999px;top:0;visibility:hidden;pointer-events:none";
   const content = document.createElement("div");
-  content.className = "reader-content";
+  content.className = "reader-content book-css";
   content.lang = "en";
   Object.assign(content.style, {
     width: `${layout.contentWidth}px`,
@@ -111,16 +111,16 @@ export function countChapterCols(
     if (block.type === "heading") {
       const level = Math.min(6, Math.max(1, block.level ?? 1));
       const el = document.createElement(`h${level}`);
-      el.className = headingClass(level, i === 0);
+      el.className = blockClasses(block, i, chapter.blocks);
+      el.style.cssText = block.style ?? "";
       if (block.html) el.innerHTML = block.html;
       else el.textContent = block.text;
       content.appendChild(el);
       return;
     }
     const p = document.createElement("p");
-    if (i > 0 && chapter.blocks[i - 1].type === "paragraph") {
-      p.className = "reader-indent";
-    }
+    p.className = blockClasses(block, i, chapter.blocks);
+    p.style.cssText = block.style ?? "";
     if (block.html) p.innerHTML = block.html;
     else p.textContent = block.text;
     content.appendChild(p);
@@ -171,6 +171,22 @@ function headingClass(level: number, isFirst: boolean): string {
           ? "text-[1.1em]"
           : "text-[1em]";
   return `${spacing} ${size} text-center font-bold leading-snug text-reader-accent`;
+}
+
+/** Class list for a heading/paragraph block — single source of truth for the
+ *  measure pass and the live render, so column counts can't drift. */
+function blockClasses(
+  block: ContentBlock,
+  i: number,
+  blocks: ContentBlock[],
+): string {
+  const base =
+    block.type === "heading"
+      ? headingClass(Math.min(6, Math.max(1, block.level ?? 1)), i === 0)
+      : i > 0 && blocks[i - 1].type === "paragraph"
+        ? "reader-indent"
+        : "";
+  return `${base} ${block.className ?? ""}`.trim();
 }
 
 /**
@@ -556,7 +572,7 @@ export function PagedChapter({
             lang="en"
             onClick={handleContentClick}
             onContextMenu={onContextMenu}
-            className={`reader-content text-reader${animate ? " transition-transform duration-200 ease-out" : ""}`}
+            className={`reader-content book-css text-reader${animate ? " transition-transform duration-200 ease-out" : ""}`}
             style={{
               width: geom ? geom.contentWidth : "100%",
               height: geom ? geom.contentHeight : "100%",
@@ -597,6 +613,9 @@ export function PagedChapter({
               );
               const ttsClass =
                 highlightBlockIndex === i ? "reader-tts-speaking" : "";
+              const blockStyle = block.style
+                ? ({ cssText: block.style } as React.CSSProperties)
+                : undefined;
               if (block.type === "heading") {
                 const level = Math.min(6, Math.max(1, block.level ?? 1));
                 const Tag = `h${level}` as "h1";
@@ -605,22 +624,20 @@ export function PagedChapter({
                     key={i}
                     id={block.fragment || undefined}
                     data-b={i}
-                    className={`${headingClass(level, i === 0)} ${ttsClass}`}
+                    style={blockStyle}
+                    className={`${blockClasses(block, i, chapter.blocks)} ${ttsClass}`}
                   >
                     {body}
                   </Tag>
                 );
               }
-              // Book convention: no indent on a paragraph right after a
-              // heading; every paragraph after another paragraph is indented.
-              const indent =
-                i > 0 && chapter.blocks[i - 1].type === "paragraph";
               return (
                 <p
                   key={i}
                   id={block.fragment || undefined}
                   data-b={i}
-                  className={`${indent ? "reader-indent" : ""} ${ttsClass}`}
+                  style={blockStyle}
+                  className={`${blockClasses(block, i, chapter.blocks)} ${ttsClass}`}
                 >
                   {body}
                 </p>
