@@ -91,13 +91,22 @@ export function countChapterCols(
       const img = document.createElement("img");
       img.className = "reader-image";
       img.src = `yumi://asset/${block.src}`;
-      img.style.width = `${layout.colWidth}px`;
       img.style.height = "auto";
       // Set natural dimensions so the browser reserves the correct aspect
       // ratio before the image loads — prevents column-count undercount.
       if (block.imgWidth && block.imgHeight) {
         img.width = block.imgWidth;
         img.height = block.imgHeight;
+        // Natural width capped to the column (and, for images taller than
+        // the column, to the height-cap the CSS applies): some book CSS
+        // sets img width:auto, which makes Chrome ignore the width/height
+        // attrs for unloaded images (0×0 box) — an explicit width keeps the
+        // box, and thus the column count, identical before/after decode.
+        img.style.width = `${Math.min(
+          block.imgWidth,
+          layout.colWidth,
+          (layout.contentHeight * block.imgWidth) / block.imgHeight,
+        )}px`;
       } else {
         // ponytail: unknown dimensions — use a conservative placeholder so
         // column counting isn't wildly off.
@@ -292,6 +301,24 @@ export function PagedChapter({
     content.style.height = `${contentHeight}px`;
     content.style.columnWidth = `${colWidth}px`;
     content.style.columnGap = `${colGap}px`;
+
+    // Reserve unloaded image boxes: book CSS that sets img width:auto makes
+    // Chrome drop the width/height-attr size for unloaded images (0×0 box),
+    // which would undercount columns until they decode. Pinning the width
+    // gives the same box the decoded image will have, so the column count
+    // can't drift with load timing. Block images get the same width from the
+    // render below; this covers inline <img> inside paragraph HTML and the
+    // pre-geometry first render.
+    for (const img of content.querySelectorAll<HTMLImageElement>("img")) {
+      if (img.complete) continue;
+      const w = parseInt(img.getAttribute("width") ?? "", 10);
+      const h = parseInt(img.getAttribute("height") ?? "", 10);
+      if (Number.isFinite(w)) {
+        const capped =
+          Number.isFinite(h) && h > 0 ? (contentHeight * w) / h : colWidth;
+        img.style.width = `${Math.min(w, colWidth, capped)}px`;
+      }
+    }
 
     const stride = colWidth + colGap;
     const totalCols = Math.max(
@@ -600,6 +627,28 @@ export function PagedChapter({
                     alt={block.text || ""}
                     width={block.imgWidth}
                     height={block.imgHeight}
+                    // Same reservation as the offscreen count: book CSS with
+                    // `img { width: auto }` zeroes unloaded image boxes, so
+                    // pin the width (capped to the column, and to the CSS
+                    // height-cap for portrait images) — the box matches the
+                    // decoded image and the measure can't drift with load
+                    // timing.
+                    style={
+                      geom && block.imgWidth && block.imgHeight
+                        ? {
+                            width: `${Math.min(
+                              block.imgWidth,
+                              geom.colWidth,
+                              (geom.contentHeight * block.imgWidth) /
+                                block.imgHeight,
+                            )}px`,
+                          }
+                        : geom && block.imgWidth
+                          ? {
+                              width: `${Math.min(block.imgWidth, geom.colWidth)}px`,
+                            }
+                          : undefined
+                    }
                     className="reader-image cursor-zoom-in"
                     onClick={() => setLightboxSrc(src)}
                   />
