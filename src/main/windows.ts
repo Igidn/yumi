@@ -1,9 +1,9 @@
-import { BrowserWindow } from "electron";
+import { app, BrowserWindow } from "electron";
 import path from "path";
 
 import { getStore } from "./store";
 
-const isDev = process.env.NODE_ENV !== "production";
+const isDev = !app.isPackaged;
 
 /** One reader window per book, Apple Books style: re-opening focuses it. */
 const readerWindows = new Map<number, BrowserWindow>();
