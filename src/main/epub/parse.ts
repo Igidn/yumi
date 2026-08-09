@@ -4,6 +4,7 @@ import path from "path";
 import { getCoversDir } from "../paths";
 import { extractBlocks, makeLinkResolver } from "./blocks";
 import { Epub } from "./epub-class";
+import { type CssState, extractBookStylesheets, newCssState } from "./epub-css";
 import { loadNav } from "./nav";
 import type { ContentBlock, EpubCover, EpubMeta, ParsedEpub } from "./types";
 import { MAX_EXTRACTED_IMAGES, MAX_IMAGE_SIZE_BYTES } from "./types";
@@ -87,6 +88,13 @@ export async function parseEpub(
         : null;
     if (imageDir) fs.mkdirSync(imageDir, { recursive: true });
 
+    // Stylesheet extraction setup (zip-mirrored under covers/<id>/css).
+    const cssRoot =
+      bookId !== undefined
+        ? path.join(getCoversDir(), String(bookId), "css")
+        : null;
+    const cssState: CssState | null = cssRoot ? newCssState() : null;
+
     const spineToChapter = new Map<string, number>();
     const chapters: ParsedEpub["chapters"] = [];
     let coveredUpTo = 0;
@@ -127,6 +135,8 @@ export async function parseEpub(
           imageMap,
           spineToChapter,
           chapters.length,
+          cssRoot,
+          cssState,
         );
 
         if (allBlocks.length === 0) continue;
@@ -137,7 +147,7 @@ export async function parseEpub(
         chapters.push({
           index: chapters.length,
           title: entry.label,
-          rawText: JSON.stringify(allBlocks),
+          rawText: JSON.stringify({ v: 2, blocks: allBlocks }),
         });
         coveredUpTo = Math.max(coveredUpTo, nextStartIndex);
       }
@@ -157,6 +167,15 @@ export async function parseEpub(
 
         const docFullPath = epub.resolve(item.href).replace(/^\/+/, "");
         await extractImages(epub, doc, docFullPath, imageDir, imageMap);
+        if (cssRoot && cssState) {
+          await extractBookStylesheets(
+            epub,
+            doc,
+            docFullPath,
+            cssRoot,
+            cssState,
+          );
+        }
 
         const resolveLink = makeLinkResolver(
           docFullPath,
@@ -171,9 +190,22 @@ export async function parseEpub(
         chapters.push({
           index: chapters.length,
           title: chapterTitle(doc, `Chapter ${chapters.length + 1}`),
-          rawText: JSON.stringify(blocks),
+          rawText: JSON.stringify({ v: 2, blocks }),
         });
       }
+    }
+
+    // Manifest of extracted stylesheets for the reader to link, in cascade
+    // order. Absent file = book has no stylesheets (or pre-0.1.3 import).
+    if (cssRoot && cssState && cssState.order.length > 0) {
+      const urls = cssState.order.map((rel) => {
+        const segments = ["covers", String(bookId), "css", ...rel.split("/")];
+        return `yumi://asset/${segments.map(encodeURIComponent).join("/")}`;
+      });
+      await fs.promises.writeFile(
+        path.join(getCoversDir(), String(bookId), "stylesheets.json"),
+        JSON.stringify(urls),
+      );
     }
 
     return { title, author, chapters };
@@ -227,6 +259,8 @@ async function extractBlocksForRange(
   imageMap: Map<string, string>,
   spineToChapter: Map<string, number>,
   chapterIndex: number,
+  cssRoot: string | null,
+  cssState: CssState | null,
 ): Promise<ContentBlock[]> {
   const allBlocks: ContentBlock[] = [];
 
@@ -243,6 +277,9 @@ async function extractBlocksForRange(
     const docFullPath = epub.resolve(item.href).replace(/^\/+/, "");
 
     await extractImages(epub, doc, docFullPath, imageDir, imageMap);
+    if (cssRoot && cssState) {
+      await extractBookStylesheets(epub, doc, docFullPath, cssRoot, cssState);
+    }
 
     const resolveLink = makeLinkResolver(
       docFullPath,

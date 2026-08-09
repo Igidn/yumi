@@ -17,7 +17,8 @@ async function main(): Promise<void> {
   );
   const first = parsed.chapters[0];
   if (first) {
-    const blocks: ContentBlock[] = JSON.parse(first.rawText);
+    const raw = JSON.parse(first.rawText);
+    const blocks: ContentBlock[] = Array.isArray(raw) ? raw : raw.blocks;
     console.log(`  ch0 "${first.title}": ${blocks.length} blocks`);
     console.log(`  first block: ${JSON.stringify(blocks[0])}`);
   }

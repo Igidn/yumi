@@ -70,7 +70,7 @@ export function countChapterCols(
   host.style.cssText =
     "position:absolute;left:-99999px;top:0;visibility:hidden;pointer-events:none";
   const content = document.createElement("div");
-  content.className = "reader-content";
+  content.className = "reader-content book-css";
   content.lang = "en";
   Object.assign(content.style, {
     width: `${layout.contentWidth}px`,
@@ -556,7 +556,7 @@ export function PagedChapter({
             lang="en"
             onClick={handleContentClick}
             onContextMenu={onContextMenu}
-            className={`reader-content text-reader${animate ? " transition-transform duration-200 ease-out" : ""}`}
+            className={`reader-content book-css text-reader${animate ? " transition-transform duration-200 ease-out" : ""}`}
             style={{
               width: geom ? geom.contentWidth : "100%",
               height: geom ? geom.contentHeight : "100%",

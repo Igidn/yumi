@@ -1,4 +1,6 @@
 import { and, asc, eq, isNull } from "drizzle-orm";
+import fs from "fs";
+import path from "path";
 
 import type {
   ContentBlock,
@@ -9,6 +11,7 @@ import { getDb } from "./database";
 import { books, chapters } from "./db/schema";
 import { parseEpub } from "./epub";
 import { bookForRenderer, coverUrlForRenderer } from "./import";
+import { getCoversDir } from "./paths";
 import { fetchWebnovelChapterBlocks } from "./webnovel";
 
 /** Per-book parse lock so two concurrent reader:load calls don't both insert. */
@@ -30,10 +33,40 @@ function parseWithLock(
 function blocksFromRaw(rawText: string): ContentBlock[] {
   try {
     const parsed = JSON.parse(rawText);
-    return Array.isArray(parsed) ? (parsed as ContentBlock[]) : [];
+    // v2 (current): { v: 2, blocks: [...] }. v1 (pre-styling): bare array.
+    if (Array.isArray(parsed)) return parsed as ContentBlock[];
+    if (parsed && Array.isArray(parsed.blocks))
+      return parsed.blocks as ContentBlock[];
+    return [];
   } catch {
     // ponytail: a corrupt raw_text row reads as an empty chapter rather than
     // failing the whole book; re-import restores it.
+    return [];
+  }
+}
+
+/** True when rawText was written by the current parser (v2 wrapper). */
+function rawIsCurrentFormat(rawText: string): boolean {
+  try {
+    const parsed = JSON.parse(rawText);
+    return (
+      !!parsed && typeof parsed === "object" && Array.isArray(parsed.blocks)
+    );
+  } catch {
+    return false;
+  }
+}
+
+/** Read the stylesheet manifest written by parseEpub, if present. */
+function stylesheetsForBook(bookId: number): string[] {
+  try {
+    const raw = fs.readFileSync(
+      path.join(getCoversDir(), String(bookId), "stylesheets.json"),
+      "utf8",
+    );
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as string[]) : [];
+  } catch {
     return [];
   }
 }
@@ -77,6 +110,10 @@ async function doParseEpub(
  * consecutive duplicate title: GEB's own TOC lists "CHAPTER VIII" twice,
  * and re-parsing on that would churn chapter ids on every open, making
  * lastChapterId stale and resume always fall back to scalar progress.
+ *
+ * v1→v2 migration: chapters parsed before the styling parser stored a bare
+ * block array. Such books are re-parsed once (same scroll-position
+ * preservation) so inline styling and book stylesheets are extracted.
  */
 async function ensureChapters(
   bookId: number,
@@ -98,9 +135,19 @@ async function ensureChapters(
       existing.every(
         (c, i) => i % 2 === 0 || c.title === existing[i - 1].title,
       );
-    if (!looksBuggy || format !== "epub") return existing;
+    if (format !== "epub") return existing;
+    // Books parsed before the styling parser stored a bare block array with
+    // no class/style markup and no extracted stylesheets; re-parse them once
+    // so styling + book CSS land on next open.
+    const oldFormat = !rawIsCurrentFormat(existing[0].rawText);
+    if (!looksBuggy && !oldFormat) return existing;
 
-    // Self-heal: delete duplicates and re-parse once.
+    // Re-parse (self-heal or v1→v2 migration): delete and re-insert, then
+    // re-attach each chapter's scrollPosition by title (taking the max
+    // across the duplicates) so the reader's in-chapter position survives
+    // the migration. Per-chapter ids change — annotations/notes/drawings on
+    // those old chapter rows are dropped by the cascade; their data was
+    // already on the wrong chapter.
     const scrollByTitle = new Map<string, number>();
     for (const c of existing) {
       if (c.scrollPosition > (scrollByTitle.get(c.title) ?? 0)) {
@@ -185,6 +232,7 @@ export async function loadReaderBook(bookId: number): Promise<ReaderPayload> {
     book: bookForRenderer(book),
     chapters: readerChapters,
     resumeChapterPos,
+    stylesheets: stylesheetsForBook(book.id),
   };
 }
 
