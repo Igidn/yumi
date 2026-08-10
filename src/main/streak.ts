@@ -106,10 +106,7 @@ if (typeof process !== "undefined" && process.argv[1]?.endsWith("streak.ts")) {
     throw new Error("best streak must survive the goal change");
 
   // And it keeps growing forward from there.
-  const next = metByDateFor(
-    [...activity, day("2026-08-11", 1200)],
-    1200,
-  );
+  const next = metByDateFor([...activity, day("2026-08-11", 1200)], 1200);
   if (computeStreaks(next, "2026-08-11", today).streakDays !== 2)
     throw new Error("streak should grow forward after the change");
 
