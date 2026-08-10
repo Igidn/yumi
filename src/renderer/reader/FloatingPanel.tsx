@@ -89,9 +89,7 @@ interface FloatingPanelProps {
 export function FloatingPanel({ isOpen, onClose }: FloatingPanelProps) {
   const [rect, setRect] = useState<PanelRect>(() => {
     const saved = loadPanelState();
-    return saved
-      ? { ...saved, y: Math.max(saved.y, MIN_Y) }
-      : DEFAULT_RECT;
+    return saved ? { ...saved, y: Math.max(saved.y, MIN_Y) } : DEFAULT_RECT;
   });
   const [minimized, setMinimized] = useState(false);
   const [tabs, setTabs] = useState<DrawingTab[]>([]);
@@ -314,10 +312,10 @@ export function FloatingPanel({ isOpen, onClose }: FloatingPanelProps) {
           }
           if (dir.includes("s")) h = clamp(ph + dy, MIN_HEIGHT, 9999);
           if (dir.includes("n")) {
-          const newH = clamp(ph - dy, MIN_HEIGHT, 9999);
-          y = Math.max(py + ph - newH, MIN_Y);
-          h = py + ph - y; // shrink if the snap to MIN_Y clipped the size
-        }
+            const newH = clamp(ph - dy, MIN_HEIGHT, 9999);
+            y = Math.max(py + ph - newH, MIN_Y);
+            h = py + ph - y; // shrink if the snap to MIN_Y clipped the size
+          }
 
           return { x, y, width: w, height: h };
         });
