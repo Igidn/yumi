@@ -80,10 +80,14 @@ export async function getReadingStats(): Promise<ReadingStats> {
     .from(readingActivity)
     .orderBy(readingActivity.date);
   const todayKey = localDateKey(new Date());
-  const metByDate = metByDateFor(activity, goalSeconds, await getGoalSetAt());
+  const metByDate = metByDateFor(activity, goalSeconds);
   const todaySeconds =
     activity.find((row) => row.date === todayKey)?.seconds ?? 0;
-  const { streakDays, bestStreakDays } = computeStreaks(metByDate, todayKey);
+  const { streakDays, bestStreakDays } = computeStreaks(
+    metByDate,
+    todayKey,
+    await getGoalSetAt(),
+  );
 
   // Books finished this calendar year (finishedAt is UTC ISO; the year
   // boundary is judged in local time), most recently finished first.
