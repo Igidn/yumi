@@ -24,7 +24,12 @@ import {
   loadReaderChapter,
   saveReaderProgress,
 } from "./reader";
-import { getReadingStats, logReadingSeconds } from "./reading";
+import {
+  getReadingStats,
+  logReadingSeconds,
+  READING_GOAL_KEY,
+  setReadingGoalMinutes,
+} from "./reading";
 import { getStore } from "./store";
 import { registerTtsHandlers } from "./tts";
 import { importWebnovel, refreshWebnovelChapters } from "./webnovel";
@@ -68,6 +73,9 @@ export function registerIpcHandlers(): void {
   });
 
   handle("settings:set", async (_, payload) => {
+    if (payload.key === READING_GOAL_KEY) {
+      await setReadingGoalMinutes(Number(payload.value));
+    }
     const db = await getDb();
     await db
       .insert(appSettings)
