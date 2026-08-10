@@ -26,6 +26,10 @@ const MIN_WIDTH = 200;
 const MIN_HEIGHT = 150;
 const HANDLE_SIZE = 6;
 const CORNER_SIZE = 16;
+// Keep the panel below the reader's auto-hiding header (h-[52px] in
+// ReaderView); parked under it, the panel's drag strip gets covered and
+// can't be recovered.
+const MIN_Y = 25;
 
 const PANEL_STATE_KEY = "drawing:panel-state";
 const ACTIVE_TAB_KEY = "drawing:active-tab";
@@ -83,9 +87,12 @@ interface FloatingPanelProps {
 }
 
 export function FloatingPanel({ isOpen, onClose }: FloatingPanelProps) {
-  const [rect, setRect] = useState<PanelRect>(
-    () => loadPanelState() ?? DEFAULT_RECT,
-  );
+  const [rect, setRect] = useState<PanelRect>(() => {
+    const saved = loadPanelState();
+    return saved
+      ? { ...saved, y: Math.max(saved.y, MIN_Y) }
+      : DEFAULT_RECT;
+  });
   const [minimized, setMinimized] = useState(false);
   const [tabs, setTabs] = useState<DrawingTab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
@@ -260,11 +267,12 @@ export function FloatingPanel({ isOpen, onClose }: FloatingPanelProps) {
       const py = rect.y;
 
       const onMove = (ev: PointerEvent) => {
-        setRect((prev) => ({
-          ...prev,
+        setRect({
           x: px + (ev.clientX - startX),
-          y: py + (ev.clientY - startY),
-        }));
+          y: Math.max(py + (ev.clientY - startY), MIN_Y),
+          width: rect.width,
+          height: rect.height,
+        });
       };
       const onUp = () => {
         window.removeEventListener("pointermove", onMove);
@@ -306,10 +314,10 @@ export function FloatingPanel({ isOpen, onClose }: FloatingPanelProps) {
           }
           if (dir.includes("s")) h = clamp(ph + dy, MIN_HEIGHT, 9999);
           if (dir.includes("n")) {
-            const newH = clamp(ph - dy, MIN_HEIGHT, 9999);
-            y = py + ph - newH;
-            h = newH;
-          }
+          const newH = clamp(ph - dy, MIN_HEIGHT, 9999);
+          y = Math.max(py + ph - newH, MIN_Y);
+          h = py + ph - y; // shrink if the snap to MIN_Y clipped the size
+        }
 
           return { x, y, width: w, height: h };
         });
