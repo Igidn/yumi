@@ -163,6 +163,32 @@
   margin: 0;
 }
 
+/* Theme ink wins over the book's own text color. Books routinely hardcode
+   one — Calibre exports ship `color:#000` on the body class, which outranks
+   the theme and leaves black ink on the dark paper. Deciding this in CSS
+   rather than per element in JS is the point: a DOM pass reads computed
+   colors at one instant, and the book sheets land after that, so the verdict
+   would flip the moment the reader turns a page. `!important` is what lets
+   one rule beat both `.book-css .bookclass` and an inline `style="color:…"`.
+
+   --reader-ink resolves per theme, so the same rule covers dark (black book
+   text) and light (white book text) with no theme variants here. */
+.reader-content.book-css,
+.reader-content.book-css * {
+  color: var(--reader-ink) !important;
+}
+
+/* Links and headings carry meaning that plain ink would flatten, so they get
+   the theme accent back. Higher specificity than the rule above, so they win
+   without relying on source order. */
+.reader-content.book-css a,
+.reader-content.book-css a * {
+  color: var(--reader-accent) !important;
+}
+.reader-content.book-css :is(h1, h2, h3, h4, h5, h6) {
+  color: var(--reader-accent) !important;
+}
+
 /* Book convention: paragraphs after the first get a first-line indent,
    not inter-paragraph spacing (see the Apple Books reference). */
 .reader-content p.reader-indent {
